@@ -54,6 +54,10 @@ class Settings(BaseSettings):
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"
     neo4j_password: str = ""
+    neo4j_tls_verify: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("NEO4J_TLS_VERIFY", "NEO4J_VERIFY_TLS"),
+    )
     graph_backend: str = "neo4j"
 
     data_dir: str = "./data"

@@ -25,6 +25,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     configure_logging(settings.log_level)
     if not settings.tls_verify:
         logger.warning("TLS verification is disabled by explicit configuration.")
+    if settings.graph_backend == "neo4j" and not settings.neo4j_tls_verify:
+        logger.warning("Neo4j TLS certificate verification is disabled (NEO4J_TLS_VERIFY=false).")
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):

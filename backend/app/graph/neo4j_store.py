@@ -89,11 +89,20 @@ def _row(entity: EntityUpsert) -> dict:
 class Neo4jGraphStore:
     backend = "neo4j"
 
-    def __init__(self, uri: str, user: str, password: str, source_system: str) -> None:
+    def __init__(
+        self,
+        uri: str,
+        user: str,
+        password: str,
+        source_system: str,
+        *,
+        tls_verify: bool = True,
+    ) -> None:
         self.uri = uri
         self.user = user
         self._password = password
         self.source_system = source_system
+        self.tls_verify = tls_verify
         self._driver = None
 
     def __repr__(self) -> str:
@@ -103,6 +112,14 @@ class Neo4jGraphStore:
         if self._driver is not None:
             self._driver.close()
             self._driver = None
+
+    def _driver_kwargs(self) -> dict:
+        if self.tls_verify:
+            return {}
+        # Office SSL inspection replaces Aura certs; still encrypt, skip CA check.
+        from neo4j import TrustAll
+
+        return {"trusted_certificates": TrustAll()}
 
     def _connect(self):
         if self._driver is not None:
@@ -116,8 +133,9 @@ class Neo4jGraphStore:
 
         candidates = _uri_candidates(self.uri)
         last_error: Exception | None = None
+        driver_kwargs = self._driver_kwargs()
         for uri in candidates:
-            driver = GraphDatabase.driver(uri, auth=(self.user, self._password))
+            driver = GraphDatabase.driver(uri, auth=(self.user, self._password), **driver_kwargs)
             try:
                 driver.verify_connectivity()
                 # Aura bolt+s often verifies but cannot open the tenant DB without routing.
@@ -135,7 +153,12 @@ class Neo4jGraphStore:
                 continue
 
         message = "Neo4j connection failed."
-        if last_error and _is_routing_failure(last_error):
+        if last_error and _is_ssl_failure(last_error):
+            message = (
+                "Neo4j TLS certificate verification failed (common on office networks with SSL inspection). "
+                "Set NEO4J_TLS_VERIFY=false in .env and restart, or use GRAPH_BACKEND=memory."
+            )
+        elif last_error and _is_routing_failure(last_error):
             message = (
                 "Neo4j Aura needs neo4j+s:// routing to open the tenant database. "
                 "Set NEO4J_URI=neo4j+s://YOUR_ID.databases.neo4j.io (not bolt+s://). "
@@ -167,6 +190,11 @@ class Neo4jGraphStore:
             self._reset_driver()
             detail = redact_text(str(exc)).strip() or "unknown Neo4j error"
             text = detail.lower()
+            if _is_ssl_failure(exc):
+                raise GraphError(
+                    "Neo4j TLS certificate verification failed (common on office networks with SSL inspection). "
+                    "Set NEO4J_TLS_VERIFY=false in .env and restart, or use GRAPH_BACKEND=memory."
+                ) from exc
             if _is_routing_failure(exc) or "routing" in text:
                 raise GraphError(
                     "Neo4j could not retrieve routing information. "
@@ -629,4 +657,22 @@ def _is_routing_failure(exc: Exception) -> bool:
         or "unable to retrieve routing information" in text
         or "databasenotfound" in text
         or "database not found" in text
+    )
+
+
+def _is_ssl_failure(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return any(
+        token in text
+        for token in (
+            "certificate",
+            "ssl",
+            "tls",
+            "certifi",
+            "certificate_verify_failed",
+            "certificate verify failed",
+            "unable to get local issuer",
+            "self signed certificate",
+            "hostname mismatch",
+        )
     )

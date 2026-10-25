@@ -76,6 +76,7 @@ def build_graph(settings):
             settings.neo4j_user,
             settings.neo4j_password,
             settings.source_system,
+            tls_verify=settings.neo4j_tls_verify,
         )
     raise ValidationFailed("GRAPH_BACKEND must be memory or neo4j.")
 
