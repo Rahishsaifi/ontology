@@ -4,7 +4,7 @@ import { Button, CodeBlock, ErrorText, Field, PageIntro, Panel } from "../compon
 
 export function ConnectPage() {
   const [baseUrl, setBaseUrl] = useState("");
-  const [authMethod, setAuthMethod] = useState("oauth_saml_private_key");
+  const [authMethod, setAuthMethod] = useState("oauth_bearer");
   const [accessToken, setAccessToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -57,7 +57,7 @@ export function ConnectPage() {
       <PageIntro
         kicker="Tenant"
         title="Connect"
-        body="Use private-key SAML when you have company id, client id, user id, private key, token URL, and user_key. Username and password are not required for that flow."
+        body="Paste a SuccessFactors OData access token from Postman (oauth_bearer), or use private-key SAML if you prefer to mint the token here. Set DEMO_MODE=false in .env for a live tenant."
       />
       <Panel
         title="SuccessFactors endpoint"
@@ -86,8 +86,8 @@ export function ConnectPage() {
               Auth method
             </span>
             <select className="field" value={authMethod} onChange={(event) => setAuthMethod(event.target.value)}>
+              <option value="oauth_bearer">oauth_bearer (Postman access token)</option>
               <option value="oauth_saml_private_key">oauth_saml_private_key</option>
-              <option value="oauth_bearer">oauth_bearer</option>
               <option value="oauth_saml_bearer">oauth_saml_bearer (paste assertion)</option>
               <option value="basic">basic</option>
             </select>
@@ -131,7 +131,14 @@ export function ConnectPage() {
 
           {authMethod === "oauth_bearer" ? (
             <div className="md:col-span-2">
-              <Field label="Access token" value={accessToken} onChange={setAccessToken} secret />
+              <Field
+                label="Access token"
+                value={accessToken}
+                onChange={setAccessToken}
+                multiline
+                placeholder="Paste the Bearer access_token from Postman"
+                hint="Only the token value, without the word Bearer. Cleared from this form after a successful test."
+              />
             </div>
           ) : null}
 
