@@ -160,11 +160,47 @@ def run_ingestion(
             dry_run,
         )
 
+    skipped_only = (
+        not error_count
+        and not wrote_any
+        and bool(summary["entities"])
+        and all(item.get("status") == "skipped" for item in summary["entities"].values())
+    )
+    empty_fetch = (
+        not error_count
+        and not skipped_only
+        and sum(int(item.get("fetched") or 0) for item in summary["entities"].values()) == 0
+    )
+    summary["outcome"] = (
+        "all_skipped_not_approved"
+        if skipped_only
+        else "empty_fetch"
+        if empty_fetch
+        else "wrote"
+        if wrote_any
+        else "validated"
+        if dry_run
+        else "completed"
+    )
+    if skipped_only:
+        summary["hint"] = (
+            "No rows were imported because none of the selected entity sets have an approved ontology mapping. "
+            "Open Ontology, approve the classes you need, then run Import again."
+        )
+    elif empty_fetch and not dry_run:
+        summary["hint"] = (
+            "The job finished without fetching rows. Check Job details for per-entity status, "
+            "or confirm SuccessFactors returned data for these sets."
+        )
+
     status = "succeeded"
     if error_count and wrote_any:
         status = "partial"
     elif error_count:
         status = "failed"
+    elif skipped_only or (empty_fetch and not dry_run):
+        # Not a hard failure, but the UI should treat this as a warning outcome.
+        status = "partial"
     database.update_job(job_id, status=status, finished_at=_now(), summary=summary)
 
 

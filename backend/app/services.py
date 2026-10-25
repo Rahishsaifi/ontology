@@ -400,6 +400,18 @@ def start_job(state: AppState, *, job_type: str, entity_sets: list[str], mode: s
     unknown = [name for name in entity_sets if catalog.entity_for_set(name) is None]
     if unknown:
         raise ValidationFailed(f"Unknown entity sets: {', '.join(unknown)}.")
+    approved_sets = []
+    for name in entity_sets:
+        entity = catalog.entity_for_set(name)
+        match = next((item for item in ontology.classes if item.source_entity_type == entity.qualified_name), None)
+        if match is not None and match.status == "approved":
+            approved_sets.append(name)
+    if not approved_sets:
+        raise ValidationFailed(
+            "None of the selected entity sets are approved in Ontology. "
+            "Preview can run without approval, but Dry run / Import need approved classes. "
+            f"Selected: {', '.join(entity_sets)}."
+        )
     job = JobRecord(
         id=str(uuid.uuid4()),
         job_type=job_type,

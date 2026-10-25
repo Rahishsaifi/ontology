@@ -23,6 +23,15 @@ const DEFAULT_SETS = [
   "FOCompany",
 ];
 
+type EntityJobSummary = {
+  status?: string;
+  reason?: string;
+  fetched?: number;
+  failed?: number;
+  upserted?: number;
+  skipped?: number;
+};
+
 type JobRecord = {
   id: string;
   job_type: string;
@@ -36,7 +45,9 @@ type JobRecord = {
   };
   summary?: {
     dry_run?: boolean;
-    entities?: Record<string, { status?: string; fetched?: number; failed?: number; upserted?: number }>;
+    outcome?: string;
+    hint?: string;
+    entities?: Record<string, EntityJobSummary>;
     fatal?: string;
   };
   errors?: { message: string; entity_set?: string | null }[];
@@ -154,7 +165,7 @@ export function IngestionPage() {
       <PageIntro
         kicker="Import"
         title="Ingestion"
-        body="Only approved classes are written. Dry runs leave the graph unchanged. Sensitive and rejected properties stay out of the preview. Watch the progress panel after Dry run or Import."
+        body="Preview can run without Ontology approval. Dry run and Import only process approved classes — otherwise you get 0 rows. Dry runs leave the graph unchanged."
       />
       <Panel title="Entity selection">
         <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -234,9 +245,19 @@ export function IngestionPage() {
 function jobBanner(job: JobRecord | null): { tone: "info" | "success" | "warn" | "danger"; title: string; body: string } | null {
   if (!job) return null;
   const entitySummary = job.summary?.entities || {};
-  const fetched = Object.values(entitySummary).reduce((sum, row) => sum + (row.fetched || 0), 0);
-  const skipped = Object.values(entitySummary).filter((row) => row.status === "skipped").length;
-  const failed = Object.values(entitySummary).filter((row) => row.status === "failed").length;
+  const rows = Object.entries(entitySummary);
+  const fetched = rows.reduce((sum, [, row]) => sum + (row.fetched || 0), 0);
+  const upserted = rows.reduce((sum, [, row]) => sum + (row.upserted || 0), 0);
+  const skipped = rows.filter(([, row]) => row.status === "skipped").length;
+  const failed = rows.filter(([, row]) => row.status === "failed" || row.status === "incomplete").length;
+  const perEntity = rows
+    .map(([name, row]) => {
+      const reason = row.reason ? ` (${row.reason})` : "";
+      return `${name}: ${row.status || "unknown"}${reason}, fetched ${row.fetched || 0}`;
+    })
+    .join(" · ");
+  const hint = job.summary?.hint;
+  const outcome = job.summary?.outcome;
 
   if (job.status === "pending" || job.status === "running") {
     return {
@@ -245,20 +266,36 @@ function jobBanner(job: JobRecord | null): { tone: "info" | "success" | "warn" |
       body: "Buttons stay disabled until this job finishes. You can leave this page open and watch the bar fill.",
     };
   }
+  if (outcome === "all_skipped_not_approved" || (job.status === "partial" && skipped > 0 && fetched === 0 && upserted === 0)) {
+    return {
+      tone: "warn",
+      title: "Finished, but nothing was imported",
+      body:
+        hint ||
+        `Fetched rows: 0. ${skipped} entity set(s) were skipped (usually not approved in Ontology). ${perEntity || "Open Job details."}`,
+    };
+  }
+  if (outcome === "empty_fetch" || (job.status !== "failed" && fetched === 0 && upserted === 0 && skipped === 0)) {
+    return {
+      tone: "warn",
+      title: job.dry_run ? "Dry run finished with 0 rows" : "Import finished with 0 rows",
+      body: hint || `SuccessFactors returned no rows for the selected sets. ${perEntity || "Open Job details."}`,
+    };
+  }
   if (job.status === "succeeded") {
     return {
       tone: "success",
       title: job.dry_run ? "Dry run finished successfully" : "Import finished successfully",
       body: job.dry_run
-        ? `Validated ${job.entity_sets.length} entity set(s). No graph writes. Fetched sample/rows: ${fetched}. Skipped (not approved): ${skipped}.`
-        : `Loaded approved data for ${job.entity_sets.length} entity set(s). Fetched rows: ${fetched}. You can open Graph or Query next.`,
+        ? `Validated ${job.entity_sets.length} entity set(s). No graph writes. Fetched rows: ${fetched}. Skipped: ${skipped}. ${perEntity}`
+        : `Wrote approved data. Fetched rows: ${fetched}. Upserted: ${upserted}. Open Graph or Query next. ${perEntity}`,
     };
   }
   if (job.status === "partial") {
     return {
       tone: "warn",
       title: "Job finished with partial results",
-      body: `Some entity sets wrote data, others had errors (${failed} failed). Check Job details below.`,
+      body: `Fetched ${fetched}, upserted ${upserted}, skipped ${skipped}, failed ${failed}. ${hint || perEntity || "Check Job details below."}`,
     };
   }
   if (job.status === "failed") {
@@ -272,6 +309,6 @@ function jobBanner(job: JobRecord | null): { tone: "info" | "success" | "warn" |
   return {
     tone: "info",
     title: `Job status: ${job.status}`,
-    body: "See Job details for the full record.",
+    body: perEntity || "See Job details for the full record.",
   };
 }
