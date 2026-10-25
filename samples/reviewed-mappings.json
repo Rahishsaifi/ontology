@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "source_system": "successfactors",
+  "mappings": [
+    {"kind": "class", "source_entity_type": "SFOData.PerPerson", "status": "approved", "canonical_name": "Person", "note": "Reviewed against the synthetic metadata."},
+    {"kind": "class", "source_entity_type": "SFOData.EmpEmployment", "status": "approved", "canonical_name": "Employment", "note": "Employment is not treated as Employee."},
+    {"kind": "class", "source_entity_type": "SFOData.EmpJob", "status": "approved", "canonical_name": "JobAssignment", "note": "The key includes startDate, so history stays separate."},
+    {"kind": "class", "source_entity_type": "SFOData.FODepartment", "status": "approved", "canonical_name": "Department"},
+    {"kind": "class", "source_entity_type": "SFOData.FOBusinessUnit", "status": "approved", "canonical_name": "BusinessUnit"},
+    {"kind": "class", "source_entity_type": "SFOData.FODivision", "status": "approved", "canonical_name": "Division"},
+    {"kind": "class", "source_entity_type": "SFOData.Position", "status": "approved", "canonical_name": "Position"},
+    {"kind": "class", "source_entity_type": "SFOData.FOCompany", "status": "approved", "canonical_name": "LegalEntity"},
+    {"kind": "class", "source_entity_type": "SFOData.User", "status": "approved", "canonical_name": "UserAccount", "note": "Explicit user-account mapping. Not a person."},
+    {"kind": "property", "source_entity_type": "SFOData.User", "source_property": "nationalId", "status": "rejected", "note": "National identifiers stay out of the graph."},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "departmentNav", "status": "approved", "relationship_type": "BELONGS_TO", "source_key_fields": ["department"], "target_key_fields": ["externalCode"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "positionNav", "status": "approved", "relationship_type": "OCCUPIES", "source_key_fields": ["position"], "target_key_fields": ["code"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "businessUnitNav", "status": "approved", "relationship_type": "BELONGS_TO", "source_key_fields": ["businessUnit"], "target_key_fields": ["externalCode"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "divisionNav", "status": "approved", "relationship_type": "BELONGS_TO", "source_key_fields": ["division"], "target_key_fields": ["externalCode"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "companyNav", "status": "approved", "relationship_type": "BELONGS_TO", "source_key_fields": ["company"], "target_key_fields": ["externalCode"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "manager", "status": "approved", "relationship_type": "REPORTS_TO", "source_key_fields": ["managerId"], "target_key_fields": ["userId"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "employmentNav", "status": "approved", "relationship_type": "HAS_EMPLOYMENT", "source_key_fields": ["userId", "startDate"], "target_key_fields": ["userId", "startDate"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.User", "navigation_property": "manager", "status": "approved", "relationship_type": "REPORTS_TO", "source_key_fields": ["managerId"], "target_key_fields": ["userId"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpEmployment", "navigation_property": "personNav", "status": "approved", "relationship_type": "RELATED_TO", "source_key_fields": ["personIdExternal"], "target_key_fields": ["personIdExternal"]},
+    {"kind": "relationship", "source_entity_type": "SFOData.EmpJob", "navigation_property": "payrollAreaNav", "status": "rejected", "note": "The association is not in the metadata."}
+  ]
+}

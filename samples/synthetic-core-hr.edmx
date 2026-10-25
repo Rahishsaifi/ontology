@@ -1,0 +1,247 @@
+<?xml version="1.0" encoding="utf-8"?>
+<edmx:Edmx Version="1.0"
+  xmlns:edmx="http://schemas.microsoft.com/ado/2007/06/edmx"
+  xmlns:m="http://schemas.microsoft.com/ado/2007/08/dataservices/metadata">
+  <edmx:Reference Uri="http://169.254.169.254/latest/meta-data">
+    <edmx:Include Namespace="ExternalVendor"/>
+  </edmx:Reference>
+  <edmx:DataServices m:DataServiceVersion="2.0">
+    <Schema Namespace="SFOData"
+      xmlns="http://schemas.microsoft.com/ado/2008/09/edm"
+      xmlns:sap="http://www.sap.com/Protocols/SAPData">
+      <EntityType Name="User">
+        <Key>
+          <PropertyRef Name="userId"/>
+        </Key>
+        <Property Name="userId" Type="Edm.String" Nullable="false" sap:label="User ID"/>
+        <Property Name="displayName" Type="Edm.String" MaxLength="100" sap:label="Display Name"/>
+        <Property Name="email" Type="Edm.String" Nullable="true"/>
+        <Property Name="status" Type="Edm.String" Nullable="true"/>
+        <Property Name="managerId" Type="Edm.String" Nullable="true"/>
+        <Property Name="password" Type="Edm.String" Nullable="true"/>
+        <Property Name="nationalId" Type="Edm.String" Nullable="true"/>
+        <Property Name="homeAddress" Type="SFOData.Address" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+        <NavigationProperty Name="manager" Relationship="SFOData.user_manager" FromRole="User" ToRole="Manager"/>
+        <foo:Extra xmlns:foo="http://vendor.example/ext"/>
+      </EntityType>
+      <EntityType Name="PerPerson">
+        <Key><PropertyRef Name="personIdExternal"/></Key>
+        <Property Name="personIdExternal" Type="Edm.String" Nullable="false"/>
+        <Property Name="dateOfBirth" Type="Edm.DateTime" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+        <Documentation><Summary>Synthetic person root</Summary></Documentation>
+      </EntityType>
+      <EntityType Name="PerPersonal">
+        <Key>
+          <PropertyRef Name="personIdExternal"/>
+          <PropertyRef Name="startDate"/>
+        </Key>
+        <Property Name="personIdExternal" Type="Edm.String" Nullable="false"/>
+        <Property Name="startDate" Type="Edm.DateTime" Nullable="false"/>
+        <Property Name="endDate" Type="Edm.DateTime" Nullable="true"/>
+        <Property Name="firstName" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastName" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+        <NavigationProperty Name="personNav" Relationship="personal_person" FromRole="Personal" ToRole="Person"/>
+      </EntityType>
+      <EntityType Name="EmpEmployment">
+        <Key>
+          <PropertyRef Name="userId"/>
+          <PropertyRef Name="startDate"/>
+        </Key>
+        <Property Name="userId" Type="Edm.String" Nullable="false"/>
+        <Property Name="personIdExternal" Type="Edm.String" Nullable="true"/>
+        <Property Name="startDate" Type="Edm.DateTime" Nullable="false"/>
+        <Property Name="endDate" Type="Edm.DateTime" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+        <NavigationProperty Name="personNav" Relationship="SFOData.employment_person" FromRole="Employment" ToRole="Person"/>
+      </EntityType>
+      <EntityType Name="EmpJob">
+        <Key>
+          <PropertyRef Name="userId"/>
+          <PropertyRef Name="startDate"/>
+        </Key>
+        <Property Name="userId" Type="Edm.String" Nullable="false"/>
+        <Property Name="startDate" Type="Edm.DateTime" Nullable="false"/>
+        <Property Name="endDate" Type="Edm.DateTime" Nullable="true"/>
+        <Property Name="seqNumber" Type="Edm.Int32" Nullable="true"/>
+        <Property Name="fte" Type="Edm.Decimal" Nullable="true" Precision="10" Scale="2"/>
+        <Property Name="jobTitle" Type="Edm.String" Nullable="true"/>
+        <Property Name="department" Type="Edm.String" Nullable="true"/>
+        <Property Name="position" Type="Edm.String" Nullable="true"/>
+        <Property Name="businessUnit" Type="Edm.String" Nullable="true"/>
+        <Property Name="division" Type="Edm.String" Nullable="true"/>
+        <Property Name="company" Type="Edm.String" Nullable="true"/>
+        <Property Name="managerId" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+        <NavigationProperty Name="departmentNav" Relationship="SFOData.job_department" FromRole="Job" ToRole="Department"/>
+        <NavigationProperty Name="positionNav" Relationship="SFOData.job_position" FromRole="Job" ToRole="Position"/>
+        <NavigationProperty Name="businessUnitNav" Relationship="SFOData.job_business_unit" FromRole="Job" ToRole="BusinessUnit"/>
+        <NavigationProperty Name="divisionNav" Relationship="SFOData.job_division" FromRole="Job" ToRole="Division"/>
+        <NavigationProperty Name="companyNav" Relationship="SFOData.job_company" FromRole="Job" ToRole="Company"/>
+        <NavigationProperty Name="manager" Relationship="SFOData.job_manager" FromRole="Job" ToRole="Manager"/>
+        <NavigationProperty Name="employmentNav" Relationship="SFOData.job_employment" FromRole="Job" ToRole="Employment"/>
+        <NavigationProperty Name="payrollAreaNav" Relationship="SFOData.missingAssoc" FromRole="Job" ToRole="Payroll"/>
+      </EntityType>
+      <EntityType Name="FODepartment">
+        <Key><PropertyRef Name="externalCode"/></Key>
+        <Property Name="externalCode" Type="Edm.String" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" Nullable="true"/>
+        <Property Name="description" Type="Edm.String" Nullable="true"/>
+        <Property Name="status" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="FOBusinessUnit">
+        <Key><PropertyRef Name="externalCode"/></Key>
+        <Property Name="externalCode" Type="Edm.String" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" Nullable="true"/>
+        <Property Name="status" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="FODivision">
+        <Key><PropertyRef Name="externalCode"/></Key>
+        <Property Name="externalCode" Type="Edm.String" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" Nullable="true"/>
+        <Property Name="status" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="Position">
+        <Key><PropertyRef Name="code"/></Key>
+        <Property Name="code" Type="Edm.String" Nullable="false"/>
+        <Property Name="externalName" Type="Edm.String" Nullable="true"/>
+        <Property Name="vacant" Type="Edm.Boolean" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="FOCompany">
+        <Key><PropertyRef Name="externalCode"/></Key>
+        <Property Name="externalCode" Type="Edm.String" Nullable="false"/>
+        <Property Name="name" Type="Edm.String" Nullable="true"/>
+        <Property Name="status" Type="Edm.String" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="UnkeyedCustom">
+        <Property Name="label" Type="Edm.String" Nullable="true"/>
+      </EntityType>
+      <ComplexType Name="Address">
+        <Property Name="city" Type="Edm.String" Nullable="true"/>
+      </ComplexType>
+      <Association Name="user_manager">
+        <End Role="Manager" Type="SFOData.User" Multiplicity="0..1"/>
+        <End Role="User" Type="SFOData.User" Multiplicity="*"/>
+        <ReferentialConstraint>
+          <Principal Role="Manager"><PropertyRef Name="userId"/></Principal>
+          <Dependent Role="User"><PropertyRef Name="managerId"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="personal_person">
+        <End Role="Personal" Type="SFOData.PerPersonal" Multiplicity="*"/>
+        <End Role="Person" Type="SFOData.PerPerson" Multiplicity="1"/>
+        <ReferentialConstraint>
+          <Principal Role="Person"><PropertyRef Name="personIdExternal"/></Principal>
+          <Dependent Role="Personal"><PropertyRef Name="personIdExternal"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="employment_person">
+        <End Role="Employment" Type="SFOData.EmpEmployment" Multiplicity="*"/>
+        <End Role="Person" Type="SFOData.PerPerson" Multiplicity="1"/>
+        <ReferentialConstraint>
+          <Principal Role="Person"><PropertyRef Name="personIdExternal"/></Principal>
+          <Dependent Role="Employment"><PropertyRef Name="personIdExternal"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_department">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Department" Type="SFOData.FODepartment" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Department"><PropertyRef Name="externalCode"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="department"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_position">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Position" Type="SFOData.Position" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Position"><PropertyRef Name="code"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="position"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_business_unit">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="BusinessUnit" Type="SFOData.FOBusinessUnit" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="BusinessUnit"><PropertyRef Name="externalCode"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="businessUnit"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_division">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Division" Type="SFOData.FODivision" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Division"><PropertyRef Name="externalCode"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="division"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_company">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Company" Type="SFOData.FOCompany" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Company"><PropertyRef Name="externalCode"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="company"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_manager">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Manager" Type="SFOData.User" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Manager"><PropertyRef Name="userId"/></Principal>
+          <Dependent Role="Job"><PropertyRef Name="managerId"/></Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <Association Name="job_employment">
+        <End Role="Job" Type="SFOData.EmpJob" Multiplicity="*"/>
+        <End Role="Employment" Type="SFOData.EmpEmployment" Multiplicity="0..1"/>
+        <ReferentialConstraint>
+          <Principal Role="Employment">
+            <PropertyRef Name="userId"/>
+            <PropertyRef Name="startDate"/>
+          </Principal>
+          <Dependent Role="Job">
+            <PropertyRef Name="userId"/>
+            <PropertyRef Name="startDate"/>
+          </Dependent>
+        </ReferentialConstraint>
+      </Association>
+      <EntityContainer Name="SFContainer" m:IsDefaultEntityContainer="true">
+        <EntitySet Name="User" EntityType="SFOData.User"/>
+        <EntitySet Name="PerPerson" EntityType="SFOData.PerPerson"/>
+        <EntitySet Name="PerPersonal" EntityType="SFOData.PerPersonal"/>
+        <EntitySet Name="EmpEmployment" EntityType="SFOData.EmpEmployment"/>
+        <EntitySet Name="EmpJob" EntityType="SFOData.EmpJob"/>
+        <EntitySet Name="FODepartment" EntityType="SFOData.FODepartment"/>
+        <EntitySet Name="FOBusinessUnit" EntityType="SFOData.FOBusinessUnit"/>
+        <EntitySet Name="FODivision" EntityType="SFOData.FODivision"/>
+        <EntitySet Name="Position" EntityType="SFOData.Position"/>
+        <EntitySet Name="FOCompany" EntityType="SFOData.FOCompany"/>
+        <EntitySet Name="UnkeyedCustom" EntityType="SFOData.UnkeyedCustom"/>
+      </EntityContainer>
+    </Schema>
+    <Schema Namespace="SFODataExt" xmlns="http://schemas.microsoft.com/ado/2006/04/edm">
+      <EntityType Name="VendorNote">
+        <Key><PropertyRef Name="noteId"/></Key>
+        <Property Name="noteId" Type="Edm.String" Nullable="false"/>
+        <Property Name="comment" Type="Edm.String" Nullable="true"/>
+        <Property Name="size" Type="Edm.Int64" Nullable="true"/>
+        <Property Name="lastModifiedDateTime" Type="Edm.DateTime" Nullable="true"/>
+      </EntityType>
+      <EntityType Name="AuditShadow">
+        <Key><PropertyRef Name="shadowId"/></Key>
+        <Property Name="shadowId" Type="Edm.String" Nullable="false"/>
+        <Property Name="detail" Type="Edm.String" Nullable="true"/>
+      </EntityType>
+      <EntityContainer Name="ExtContainer">
+        <EntitySet Name="VendorNote" EntityType="SFODataExt.VendorNote"/>
+      </EntityContainer>
+    </Schema>
+  </edmx:DataServices>
+</edmx:Edmx>

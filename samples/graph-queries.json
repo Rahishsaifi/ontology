@@ -1,0 +1,39 @@
+[
+  {
+    "id": "entities-by-type",
+    "name": "Entities by type",
+    "description": "Count graph entities grouped by their SuccessFactors entity type.",
+    "cypher": "MATCH (n:SFEntity) RETURN n.entityType AS entityType, count(n) AS count ORDER BY count DESC LIMIT $limit",
+    "parameters": {
+      "limit": {"type": "integer", "default": 50, "min": 1, "max": 200}
+    }
+  },
+  {
+    "id": "reporting-lines",
+    "name": "Reporting lines",
+    "description": "Approved REPORTS_TO relationships between synthetic or imported entities.",
+    "cypher": "MATCH (e:SFEntity)-[r:REPORTS_TO]->(m:SFEntity) RETURN e.entityType AS sourceType, e.sourceKey AS sourceKey, m.entityType AS targetType, m.sourceKey AS targetKey, r.mappingId AS mappingId LIMIT $limit",
+    "parameters": {
+      "limit": {"type": "integer", "default": 50, "min": 1, "max": 200}
+    }
+  },
+  {
+    "id": "effective-dated-jobs",
+    "name": "Effective-dated jobs",
+    "description": "Job rows preserved as separate graph nodes, including historical effective dates.",
+    "cypher": "MATCH (n:SFEntity {entityType: $entityType}) RETURN n.sourceKey AS sourceKey, n.effectiveStart AS effectiveStart, n.effectiveEnd AS effectiveEnd, n.displayLabel AS displayLabel ORDER BY n.sourceKey LIMIT $limit",
+    "parameters": {
+      "entityType": {"type": "string", "default": "SFOData.EmpJob"},
+      "limit": {"type": "integer", "default": 50, "min": 1, "max": 200}
+    }
+  },
+  {
+    "id": "approved-relationships",
+    "name": "Approved relationships",
+    "description": "Business relationships created from approved mappings.",
+    "cypher": "MATCH (a:SFEntity)-[r]->(b:SFEntity) WHERE type(r) IN ['REPORTS_TO', 'BELONGS_TO', 'OCCUPIES', 'HAS_EMPLOYMENT', 'HAS_JOB', 'ASSIGNED_TO', 'RELATED_TO'] RETURN type(r) AS relationshipType, a.entityType AS sourceType, a.sourceKey AS sourceKey, b.entityType AS targetType, b.sourceKey AS targetKey, r.mappingId AS mappingId LIMIT $limit",
+    "parameters": {
+      "limit": {"type": "integer", "default": 50, "min": 1, "max": 200}
+    }
+  }
+]
