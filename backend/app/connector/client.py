@@ -34,7 +34,11 @@ def validate_select(entity, fields: list[str]) -> list[str]:
 
 
 class SuccessFactorsClient:
-    """HTTP client that only issues GET requests against the configured OData host."""
+    """HTTP client that only issues GET requests against the configured OData host.
+
+    Never DELETE/POST/PUT/PATCH entity data in SuccessFactors. Auth token exchange
+    (IdP /oauth) is separate and does not mutate HR records.
+    """
 
     def __init__(
         self,

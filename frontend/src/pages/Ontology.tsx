@@ -1,7 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import sampleMappings from "../../../samples/reviewed-mappings.json";
 import { api } from "../api";
-import { Button, ErrorText, PageIntro, Panel, statusClass } from "../components";
+import { Button, ErrorText, PageIntro, PaginationBar, Panel, Spinner, pageSlice, statusClass } from "../components";
 
 type OntologyClass = {
   class_id: string;
@@ -32,17 +32,74 @@ type Ontology = {
   mapping_version: number;
 };
 
+const PAGE_SIZE = 20;
+
 export function OntologyPage() {
   const [ontology, setOntology] = useState<Ontology | null>(null);
   const [error, setError] = useState<unknown>(null);
   const [note, setNote] = useState("Reviewed in Ontology Studio.");
+  const [generating, setGenerating] = useState(false);
+  const [classQuery, setClassQuery] = useState("");
+  const [relQuery, setRelQuery] = useState("");
+  const [classPage, setClassPage] = useState(1);
+  const [relPage, setRelPage] = useState(1);
+
+  const filteredClasses = useMemo(() => {
+    if (!ontology) return [];
+    const q = classQuery.trim().toLowerCase();
+    if (!q) return ontology.classes;
+    return ontology.classes.filter((item) => {
+      const haystack = [
+        item.source_entity_set,
+        item.source_entity_type,
+        item.canonical_name,
+        item.status,
+        item.inference_note,
+        item.class_id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [ontology, classQuery]);
+
+  const filteredRels = useMemo(() => {
+    if (!ontology) return [];
+    const q = relQuery.trim().toLowerCase();
+    if (!q) return ontology.relationships;
+    return ontology.relationships.filter((item) => {
+      const haystack = [
+        item.navigation_property,
+        item.source_entity,
+        item.target_entity,
+        item.relationship_type,
+        item.relationship_semantics,
+        item.mapping_status,
+        item.inference_note,
+        item.relationship_id,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(q);
+    });
+  }, [ontology, relQuery]);
+
+  const classRows = pageSlice(filteredClasses, classPage, PAGE_SIZE);
+  const relRows = pageSlice(filteredRels, relPage, PAGE_SIZE);
 
   async function generate() {
     setError(null);
+    setGenerating(true);
     try {
       setOntology(await api<Ontology>("/api/ontology/generate", { method: "POST" }));
+      setClassPage(1);
+      setRelPage(1);
     } catch (caught) {
       setError(caught);
+    } finally {
+      setGenerating(false);
     }
   }
 
@@ -55,6 +112,8 @@ export function OntologyPage() {
           body: JSON.stringify(sampleMappings),
         }),
       );
+      setClassPage(1);
+      setRelPage(1);
     } catch (caught) {
       setError(caught);
     }
@@ -82,15 +141,17 @@ export function OntologyPage() {
       <PageIntro
         kicker="Review"
         title="Ontology"
-        body="Structural facts are discovered automatically. Business meanings stay draft until you approve them."
+        body="Structural facts are discovered automatically. Business meanings stay draft until you approve them. Approvals only affect this app’s mapping store and Neo4j — never SuccessFactors data."
       />
       <Panel
         title="Studio"
         lead="Importing the sample review approves the synthetic Core HR mappings, including User as UserAccount."
         action={
           <>
-            <Button onClick={generate}>Generate draft</Button>
-            <Button kind="quiet" onClick={importSample}>
+            <Button onClick={generate} disabled={generating}>
+              {generating ? "Generating…" : "Generate draft"}
+            </Button>
+            <Button kind="quiet" onClick={importSample} disabled={generating}>
               Import sample review
             </Button>
           </>
@@ -100,7 +161,8 @@ export function OntologyPage() {
           <span className="muted mb-1 block text-xs font-medium uppercase tracking-[0.08em]">Review note</span>
           <input className="field" value={note} onChange={(event) => setNote(event.target.value)} />
         </label>
-        <div className="mt-3">
+        <div className="mt-3 flex flex-wrap items-center gap-3">
+          {generating ? <Spinner label="Generating ontology draft from discovered metadata…" /> : null}
           <ErrorText error={error} />
         </div>
         {ontology ? (
@@ -116,9 +178,23 @@ export function OntologyPage() {
 
       {ontology ? (
         <>
-          <Panel title="Classes">
+          <Panel
+            title="Classes"
+            lead={`${filteredClasses.length} of ${ontology.classes.length} classes${classQuery.trim() ? " matching filter" : ""}.`}
+          >
+            <div className="mb-3">
+              <input
+                className="field max-w-md"
+                value={classQuery}
+                placeholder="Search classes (entity set, type, status, canonical…)"
+                onChange={(event) => {
+                  setClassQuery(event.target.value);
+                  setClassPage(1);
+                }}
+              />
+            </div>
             <div className="divide-y divide-[var(--line)]">
-              {ontology.classes.map((item) => (
+              {classRows.map((item) => (
                 <article key={item.class_id} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -145,11 +221,27 @@ export function OntologyPage() {
                   </div>
                 </article>
               ))}
+              {classRows.length === 0 ? <p className="muted py-2 text-sm">No classes match this search.</p> : null}
             </div>
+            <PaginationBar page={classPage} pageSize={PAGE_SIZE} total={filteredClasses.length} onPageChange={setClassPage} />
           </Panel>
-          <Panel title="Relationships">
+          <Panel
+            title="Relationships"
+            lead={`${filteredRels.length} of ${ontology.relationships.length} relationships${relQuery.trim() ? " matching filter" : ""}.`}
+          >
+            <div className="mb-3">
+              <input
+                className="field max-w-md"
+                value={relQuery}
+                placeholder="Search relationships (nav, source, target, status…)"
+                onChange={(event) => {
+                  setRelQuery(event.target.value);
+                  setRelPage(1);
+                }}
+              />
+            </div>
             <div className="divide-y divide-[var(--line)]">
-              {ontology.relationships.map((item) => (
+              {relRows.map((item) => (
                 <article key={item.relationship_id} className="flex flex-wrap items-start justify-between gap-3 py-4 first:pt-0 last:pb-0">
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -179,7 +271,9 @@ export function OntologyPage() {
                   </div>
                 </article>
               ))}
+              {relRows.length === 0 ? <p className="muted py-2 text-sm">No relationships match this search.</p> : null}
             </div>
+            <PaginationBar page={relPage} pageSize={PAGE_SIZE} total={filteredRels.length} onPageChange={setRelPage} />
           </Panel>
         </>
       ) : null}

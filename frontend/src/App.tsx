@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { api } from "./api";
 import { Banner } from "./components";
 import { ConnectPage } from "./pages/Connect";
+import { DocsPage } from "./pages/Docs";
 import { GraphPage } from "./pages/Graph";
 import { IngestionPage } from "./pages/Ingestion";
 import { OntologyPage } from "./pages/Ontology";
@@ -20,6 +21,7 @@ const links = [
   ["/ingestion", "Ingestion"],
   ["/query", "Query"],
   ["/sync", "Sync"],
+  ["/docs", "Docs"],
 ];
 
 export function App() {
@@ -74,6 +76,7 @@ export function App() {
             <Route path="/ingestion" element={<IngestionPage />} />
             <Route path="/query" element={<QueryPage />} />
             <Route path="/sync" element={<SyncPage />} />
+            <Route path="/docs" element={<DocsPage />} />
           </Routes>
         </main>
       </div>

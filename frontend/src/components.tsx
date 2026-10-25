@@ -137,3 +137,52 @@ export function statusClass(status: string): string {
   if (status === "unresolved") return "status-chip status-unresolved";
   return "status-chip status-default";
 }
+
+export function Spinner({ label = "Loading…" }: { label?: string }) {
+  return (
+    <span className="inline-flex items-center gap-2 text-sm text-[var(--muted)]" role="status">
+      <span className="spinner" aria-hidden="true" />
+      {label}
+    </span>
+  );
+}
+
+export function PaginationBar({
+  page,
+  pageSize,
+  total,
+  onPageChange,
+}: {
+  page: number;
+  pageSize: number;
+  total: number;
+  onPageChange: (page: number) => void;
+}) {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize) || 1);
+  const safePage = Math.min(Math.max(1, page), pageCount);
+  const from = total === 0 ? 0 : (safePage - 1) * pageSize + 1;
+  const to = Math.min(safePage * pageSize, total);
+  return (
+    <div className="mt-3 flex flex-wrap items-center justify-between gap-3 text-sm">
+      <p className="muted">
+        {total === 0 ? "No rows" : `${from}–${to} of ${total}`}
+      </p>
+      <div className="flex items-center gap-2">
+        <Button kind="quiet" disabled={safePage <= 1} onClick={() => onPageChange(safePage - 1)}>
+          Previous
+        </Button>
+        <span className="muted tabular-nums">
+          Page {safePage} / {pageCount}
+        </span>
+        <Button kind="quiet" disabled={safePage >= pageCount} onClick={() => onPageChange(safePage + 1)}>
+          Next
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export function pageSlice<T>(items: T[], page: number, pageSize: number): T[] {
+  const start = (Math.max(1, page) - 1) * pageSize;
+  return items.slice(start, start + pageSize);
+}

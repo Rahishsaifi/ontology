@@ -1,6 +1,12 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api";
 import { Button, CodeBlock, ErrorText, Field, PageIntro, Panel } from "../components";
+
+type ConnectDefaults = {
+  base_url: string;
+  auth_method: string;
+  read_only: boolean;
+};
 
 export function ConnectPage() {
   const [baseUrl, setBaseUrl] = useState("");
@@ -17,8 +23,24 @@ export function ConnectPage() {
   const [userKey, setUserKey] = useState("");
   const [idpUrl, setIdpUrl] = useState("");
   const [remember, setRemember] = useState(true);
+  const [fromEnv, setFromEnv] = useState(false);
   const [result, setResult] = useState("");
   const [error, setError] = useState<unknown>(null);
+
+  useEffect(() => {
+    api<{ successfactors: ConnectDefaults }>("/api/health")
+      .then((health) => {
+        const sf = health.successfactors;
+        if (sf.base_url) {
+          setBaseUrl(sf.base_url);
+          setFromEnv(true);
+        }
+        if (sf.auth_method) {
+          setAuthMethod(sf.auth_method);
+        }
+      })
+      .catch(() => undefined);
+  }, []);
 
   function normalizeToken(value: string): string {
     const trimmed = value.trim();
@@ -32,9 +54,6 @@ export function ConnectPage() {
     if (authMethod === "oauth_bearer" && !token) {
       setError(new Error("Paste the SuccessFactors access_token from Postman into Access token."));
       return;
-    }
-    if (!baseUrl.trim() && authMethod !== "oauth_bearer") {
-      // base URL still required for live calls; demo mode can omit it
     }
     if (!baseUrl.trim()) {
       setError(new Error("Base URL is required, for example https://apiX.successfactors.com/odata/v2"));
@@ -75,10 +94,15 @@ export function ConnectPage() {
       <PageIntro
         kicker="Tenant"
         title="Connect"
-        body="Paste a SuccessFactors OData access token from Postman (oauth_bearer), or use private-key SAML if you prefer to mint the token here. Set DEMO_MODE=false in .env for a live tenant."
+        body="Read-only: this app only GETs OData metadata and entity feeds. It never creates, updates, or deletes SuccessFactors records. Paste the access token manually; Base URL can come from SF_BASE_URL in .env."
       />
       <Panel
         title="SuccessFactors endpoint"
+        lead={
+          fromEnv
+            ? "Base URL was loaded from SF_BASE_URL in .env. Paste only the access token below."
+            : "Set SF_BASE_URL in .env to prefill Base URL, or enter it here."
+        }
         action={
           <Button
             kind="quiet"
@@ -96,8 +120,12 @@ export function ConnectPage() {
           <Field
             label="Base URL"
             value={baseUrl}
-            onChange={setBaseUrl}
+            onChange={(value) => {
+              setBaseUrl(value);
+              setFromEnv(false);
+            }}
             placeholder="https://apiX.successfactors.com/odata/v2"
+            hint={fromEnv ? "Prefilled from .env (SF_BASE_URL)." : undefined}
           />
           <label className="block text-sm">
             <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted)]">

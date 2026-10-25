@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { api } from "../api";
-import { Button, CodeBlock, ErrorText, PageIntro, Panel } from "../components";
+import { Button, CodeBlock, ErrorText, PageIntro, PaginationBar, Panel, pageSlice } from "../components";
 
 type EntityRow = {
   entity_set: string;
@@ -12,12 +12,17 @@ type EntityRow = {
   unresolved_relationships: number;
 };
 
+const PAGE_SIZE = 25;
+
 export function SchemaPage() {
   const [rows, setRows] = useState<EntityRow[]>([]);
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState("");
   const [origin, setOrigin] = useState("");
   const [error, setError] = useState<unknown>(null);
+  const [page, setPage] = useState(1);
+
+  const pageRows = useMemo(() => pageSlice(rows, page, PAGE_SIZE), [rows, page]);
 
   async function discover() {
     setError(null);
@@ -36,6 +41,7 @@ export function SchemaPage() {
     );
     setRows(catalog.entities);
     setOrigin(catalog.origin);
+    setPage(1);
   }
 
   async function openEntity(name: string) {
@@ -53,7 +59,7 @@ export function SchemaPage() {
       <PageIntro
         kicker="Discovery"
         title="Schema"
-        body="Entity sets, keys, and navigation properties come from the downloaded $metadata document, not from a fixed Core HR checklist."
+        body="Entity sets, keys, and navigation properties come from a read-only $metadata download. Nothing in SuccessFactors is created or deleted."
       />
       <Panel title="Entity catalog" action={<Button onClick={discover}>Discover metadata</Button>}>
         <p className="muted mb-3 text-sm">Origin: {origin || "not discovered yet"}</p>
@@ -64,7 +70,14 @@ export function SchemaPage() {
             placeholder="Filter entity sets"
             onChange={(event) => setQuery(event.target.value)}
           />
-          <Button kind="quiet" onClick={() => load(query).catch(setError)}>
+          <Button
+            kind="quiet"
+            onClick={() =>
+              load(query)
+                .then(() => undefined)
+                .catch(setError)
+            }
+          >
             Search
           </Button>
         </div>
@@ -81,7 +94,7 @@ export function SchemaPage() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {pageRows.map((row) => (
                 <tr key={row.entity_set}>
                   <td>
                     <button className="linkish" onClick={() => openEntity(row.entity_set)}>
@@ -99,6 +112,7 @@ export function SchemaPage() {
             </tbody>
           </table>
         </div>
+        <PaginationBar page={page} pageSize={PAGE_SIZE} total={rows.length} onPageChange={setPage} />
       </Panel>
       {detail ? (
         <Panel title="Entity detail" lead="Keys, properties, and navigation properties for the selected set.">

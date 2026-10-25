@@ -113,6 +113,10 @@ def public_health(state: AppState) -> dict:
             "mode": "demo" if state.settings.demo_mode else state.settings.sf_auth_method,
             "credential_source": credential_source,
             "tls_verify": state.settings.tls_verify,
+            # Non-secret Connect defaults from .env (token stays blank for manual paste).
+            "base_url": state.settings.sf_base_url or "",
+            "auth_method": state.settings.sf_auth_method or "oauth_bearer",
+            "read_only": True,
         },
     }
 

@@ -85,6 +85,22 @@ a {
   }
 }
 
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spinner {
+  display: inline-block;
+  width: 0.9rem;
+  height: 0.9rem;
+  border: 2px solid rgba(15, 118, 110, 0.25);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
 .app-shell {
   position: relative;
   z-index: 1;
@@ -311,11 +327,59 @@ a {
   animation: fade-in 500ms ease both;
 }
 
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+.shimmer {
+  display: block;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    rgba(7, 22, 30, 0.06) 0%,
+    rgba(15, 118, 110, 0.12) 45%,
+    rgba(7, 22, 30, 0.06) 90%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.35s ease-in-out infinite;
+}
+
+.shimmer-line {
+  height: 0.85rem;
+}
+
+.shimmer-title {
+  height: 1.75rem;
+  width: min(14rem, 55%);
+}
+
+.shimmer-chip {
+  height: 1.4rem;
+  width: 4.25rem;
+  border-radius: 6px;
+}
+
+.shimmer-metric {
+  height: 2.25rem;
+  width: 4.5rem;
+  margin-top: 0.5rem;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter,
   .hero-status,
-  .btn {
+  .btn,
+  .shimmer {
     animation: none;
     transition: none;
+  }
+
+  .shimmer {
+    background: rgba(7, 22, 30, 0.08);
   }
 }
