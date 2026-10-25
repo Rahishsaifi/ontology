@@ -7,6 +7,7 @@ only after a non-empty full sync of that entity completes without record errors.
 from __future__ import annotations
 
 import logging
+import re
 from collections import defaultdict
 from datetime import datetime, timezone
 
@@ -21,17 +22,58 @@ logger = logging.getLogger(__name__)
 
 LABEL_FIELDS = ("displayName", "name", "externalName", "jobTitle", "firstName", "comment")
 
+# Present in SF $metadata but often blocked by RBP / field security on $select.
+NON_SELECTABLE_PROPERTIES = frozenset(
+    {
+        "operation",
+        "md5Checksum",
+        "createdBy",
+        "createdDateTime",
+        "lastModifiedBy",
+        "lastModifiedWith",
+    }
+)
+
+_NOT_VIEWABLE_RE = re.compile(
+    r"(?:bad property expression\s+)?(?:[\w.]*/)?(?P<prop>[A-Za-z_][\w]*)\s+is not viewable",
+    re.IGNORECASE,
+)
+_BAD_PROPERTY_RE = re.compile(
+    r"bad property expression\s+(?:[\w.]*/)?(?P<prop>[A-Za-z_][\w]*)",
+    re.IGNORECASE,
+)
+
 
 def _now() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def build_select(entity, ontology_class, relationships, *, include_sensitive: bool) -> list[str]:
+def parse_unviewable_property(message: str) -> str | None:
+    """Extract a property name from SuccessFactors 'not viewable' / bad $select errors."""
+    text = (message or "").strip()
+    if not text:
+        return None
+    for pattern in (_NOT_VIEWABLE_RE, _BAD_PROPERTY_RE):
+        match = pattern.search(text)
+        if match:
+            return match.group("prop")
+    return None
+
+
+def build_select(
+    entity,
+    ontology_class,
+    relationships,
+    *,
+    include_sensitive: bool,
+    exclude: set[str] | None = None,
+) -> list[str]:
     rejected = {
         prop.source_property
         for prop in ontology_class.properties
         if prop.mapping_status == "rejected" and prop.source_property not in entity.key.property_names
     }
+    blocked = set(NON_SELECTABLE_PROPERTIES) | set(exclude or ())
     sensitive = {prop.source_property for prop in ontology_class.properties if prop.sensitive}
     fields: list[str] = []
     for prop in entity.properties:
@@ -39,15 +81,17 @@ def build_select(entity, ontology_class, relationships, *, include_sensitive: bo
             continue
         if prop.name in rejected:
             continue
+        if prop.name in blocked and prop.name not in entity.key.property_names:
+            continue
         if prop.name in sensitive and prop.name not in entity.key.property_names and not include_sensitive:
             continue
         fields.append(prop.name)
     for relationship in relationships:
         for field in relationship.source_key_fields:
-            if field not in fields and field not in rejected and field in entity.property_map():
+            if field not in fields and field not in rejected and field not in blocked and field in entity.property_map():
                 fields.append(field)
     if "lastModifiedDateTime" in entity.property_map() and "lastModifiedDateTime" not in fields:
-        if "lastModifiedDateTime" not in rejected:
+        if "lastModifiedDateTime" not in rejected and "lastModifiedDateTime" not in blocked:
             fields.append("lastModifiedDateTime")
     for field in entity.key.property_names:
         if field not in fields:
@@ -198,7 +242,14 @@ def _import_entity(
         and item.mapping_status != "approved"
         and item.relationship_type
     ]
-    selected = build_select(entity, ontology_class, approved_rels, include_sensitive=include_sensitive)
+    dropped_fields: set[str] = set()
+    selected = build_select(
+        entity,
+        ontology_class,
+        approved_rels,
+        include_sensitive=include_sensitive,
+        exclude=dropped_fields,
+    )
     state = database.get_sync_state(entity_set)
     if state and state.catalog_hash and state.catalog_hash != catalog.metadata_hash:
         summary["metadata_changed"] = True
@@ -241,13 +292,26 @@ def _import_entity(
             break
         for page_filter in pages:
             try:
-                page = connector.fetch_page(
-                    entity_set,
-                    select=selected,
+                page = _fetch_page_dropping_unviewable(
+                    connector=connector,
+                    entity_set=entity_set,
+                    selected=selected,
                     catalog=catalog,
-                    top=batch_size,
-                    filter_expr=page_filter,
+                    batch_size=batch_size,
+                    page_filter=page_filter,
                     next_url=next_url if not only_source_keys else None,
+                    entity=entity,
+                    ontology_class=ontology_class,
+                    approved_rels=approved_rels,
+                    include_sensitive=include_sensitive,
+                    dropped_fields=dropped_fields,
+                )
+                selected = build_select(
+                    entity,
+                    ontology_class,
+                    approved_rels,
+                    include_sensitive=include_sensitive,
+                    exclude=dropped_fields,
                 )
             except Exception as exc:
                 incomplete = True
@@ -367,6 +431,8 @@ def _import_entity(
             if not next_url or only_source_keys:
                 break
     result["fetched"] = fetched
+    if dropped_fields:
+        result["dropped_select_fields"] = sorted(dropped_fields)
     if ontology_class.effective_dating_rule == "current_snapshot":
         if incomplete:
             database.add_error(
@@ -434,6 +500,60 @@ def _import_entity(
     else:
         result["status"] = "dry_run"
     return result, result["failed"], wrote
+
+
+def _fetch_page_dropping_unviewable(
+    *,
+    connector,
+    entity_set: str,
+    selected: list[str],
+    catalog,
+    batch_size: int,
+    page_filter,
+    next_url,
+    entity,
+    ontology_class,
+    approved_rels,
+    include_sensitive: bool,
+    dropped_fields: set[str],
+):
+    """Retry $select after dropping properties SF reports as not viewable."""
+    current = list(selected)
+    attempts = 0
+    while True:
+        try:
+            return connector.fetch_page(
+                entity_set,
+                select=current,
+                catalog=catalog,
+                top=batch_size,
+                filter_expr=page_filter,
+                next_url=next_url,
+            )
+        except Exception as exc:
+            prop = parse_unviewable_property(str(exc))
+            if not prop or prop in entity.key.property_names or prop in dropped_fields:
+                raise
+            if prop not in current and prop.lower() not in {item.lower() for item in current}:
+                raise
+            match = next((item for item in current if item.lower() == prop.lower()), prop)
+            dropped_fields.add(match)
+            current = build_select(
+                entity,
+                ontology_class,
+                approved_rels,
+                include_sensitive=include_sensitive,
+                exclude=dropped_fields,
+            )
+            attempts += 1
+            logger.warning(
+                "Dropped non-viewable SuccessFactors property %s from %s $select (attempt %s)",
+                match,
+                entity_set,
+                attempts,
+            )
+            if attempts > 40 or not current:
+                raise
 
 
 def _class_for(ontology, qualified: str):
