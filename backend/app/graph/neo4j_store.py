@@ -113,14 +113,6 @@ class Neo4jGraphStore:
             self._driver.close()
             self._driver = None
 
-    def _driver_kwargs(self) -> dict:
-        if self.tls_verify:
-            return {}
-        # Office SSL inspection replaces Aura certs; still encrypt, skip CA check.
-        from neo4j import TrustAll
-
-        return {"trusted_certificates": TrustAll()}
-
     def _connect(self):
         if self._driver is not None:
             return self._driver
@@ -131,11 +123,12 @@ class Neo4jGraphStore:
         if not self._password:
             raise GraphError("NEO4J_PASSWORD is not configured.")
 
-        candidates = _uri_candidates(self.uri)
+        # neo4j+s / bolt+s bake in system CA verification. TrustAll cannot be passed
+        # with those schemes; use neo4j+ssc / bolt+ssc when NEO4J_TLS_VERIFY=false.
+        candidates = _uri_candidates(self.uri, tls_verify=self.tls_verify)
         last_error: Exception | None = None
-        driver_kwargs = self._driver_kwargs()
         for uri in candidates:
-            driver = GraphDatabase.driver(uri, auth=(self.user, self._password), **driver_kwargs)
+            driver = GraphDatabase.driver(uri, auth=(self.user, self._password))
             try:
                 driver.verify_connectivity()
                 # Aura bolt+s often verifies but cannot open the tenant DB without routing.
@@ -620,15 +613,20 @@ def _edge_from_record(relationship, source, target) -> dict:
         "synced_at": props.get("syncedAt"),
     }
 
-def _uri_candidates(uri: str) -> list[str]:
+def _uri_candidates(uri: str, *, tls_verify: bool = True) -> list[str]:
     """Aura needs neo4j+s routing to reach the tenant database.
 
     bolt+s can verify TLS but then fail with DatabaseNotFound because the
     direct host is not the routed database member. Prefer neo4j+s for Aura.
+
+    When tls_verify is False (office SSL inspection), rewrite +s → +ssc so the
+    driver encrypts but skips CA verification. TrustAll cannot be combined with +s.
     """
     cleaned = (uri or "").strip()
     if not cleaned:
         return []
+    if not tls_verify:
+        cleaned = _to_ssc_uri(cleaned)
     out: list[str] = []
 
     def add(value: str) -> None:
@@ -636,7 +634,13 @@ def _uri_candidates(uri: str) -> list[str]:
             out.append(value)
 
     aura = "databases.neo4j.io" in cleaned.lower()
-    if cleaned.startswith("bolt+s://") and aura:
+    if cleaned.startswith("bolt+ssc://") and aura:
+        add("neo4j+ssc://" + cleaned[len("bolt+ssc://") :])
+        add(cleaned)
+    elif cleaned.startswith("neo4j+ssc://"):
+        add(cleaned)
+        add("bolt+ssc://" + cleaned[len("neo4j+ssc://") :])
+    elif cleaned.startswith("bolt+s://") and aura:
         add("neo4j+s://" + cleaned[len("bolt+s://") :])
         add(cleaned)
     elif cleaned.startswith("neo4j+s://"):
@@ -648,6 +652,20 @@ def _uri_candidates(uri: str) -> list[str]:
     else:
         add(cleaned)
     return out
+
+
+def _to_ssc_uri(uri: str) -> str:
+    """Map verified TLS schemes to self-signed / trust-all schemes."""
+    replacements = (
+        ("neo4j+s://", "neo4j+ssc://"),
+        ("bolt+s://", "bolt+ssc://"),
+        ("neo4j://", "neo4j+ssc://"),
+        ("bolt://", "bolt+ssc://"),
+    )
+    for prefix, ssc in replacements:
+        if uri.startswith(prefix):
+            return ssc + uri[len(prefix) :]
+    return uri
 
 
 def _is_routing_failure(exc: Exception) -> bool:
