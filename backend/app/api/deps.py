@@ -6,7 +6,7 @@ import hmac
 
 from fastapi import Header, Request
 
-from app.errors import Forbidden, ServiceUnavailable, Unauthorized
+from app.errors import Forbidden, Unauthorized
 
 
 def _equal(left: str, right: str) -> bool:
@@ -19,18 +19,22 @@ def _equal(left: str, right: str) -> bool:
 def resolve_role(authorization: str | None, settings) -> str:
     custom = bool(settings.app_api_token or settings.app_admin_token)
 
-    # Local demo with no configured tokens: the dashboard does not ask for a bearer token.
-    if settings.demo_mode and not custom:
+    # Local dashboard: when APP_* tokens are not configured, do not ask for a bearer token.
+    # SuccessFactors credentials are separate (Connect form / SF_* env).
+    if not custom:
         if not authorization or not authorization.strip():
             return "admin"
         if not authorization.lower().startswith("bearer "):
-            raise Unauthorized("A bearer token is required.")
-        token = authorization.split(" ", 1)[1].strip()
-        if not token or _equal(token, "demo-admin"):
             return "admin"
-        if _equal(token, "demo-reader"):
+        token = authorization.split(" ", 1)[1].strip()
+        if not token:
+            return "admin"
+        if settings.demo_mode and _equal(token, "demo-admin"):
+            return "admin"
+        if settings.demo_mode and _equal(token, "demo-reader"):
             return "reader"
-        raise Unauthorized("The bearer token was not accepted.")
+        # Unknown token while APP_* are unset — still allow local admin use.
+        return "admin"
 
     if not authorization or not authorization.lower().startswith("bearer "):
         raise Unauthorized("A bearer token is required.")
@@ -41,8 +45,6 @@ def resolve_role(authorization: str | None, settings) -> str:
         return "admin"
     if settings.app_api_token and _equal(token, settings.app_api_token):
         return "reader"
-    if not settings.demo_mode and not custom:
-        raise ServiceUnavailable("API tokens are not configured.")
     raise Unauthorized("The bearer token was not accepted.")
 
 

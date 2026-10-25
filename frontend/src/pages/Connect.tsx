@@ -20,15 +20,33 @@ export function ConnectPage() {
   const [result, setResult] = useState("");
   const [error, setError] = useState<unknown>(null);
 
+  function normalizeToken(value: string): string {
+    const trimmed = value.trim();
+    return trimmed.replace(/^Bearer\s+/i, "").trim();
+  }
+
   async function testConnection() {
     setError(null);
+    setResult("");
+    const token = normalizeToken(accessToken);
+    if (authMethod === "oauth_bearer" && !token) {
+      setError(new Error("Paste the SuccessFactors access_token from Postman into Access token."));
+      return;
+    }
+    if (!baseUrl.trim() && authMethod !== "oauth_bearer") {
+      // base URL still required for live calls; demo mode can omit it
+    }
+    if (!baseUrl.trim()) {
+      setError(new Error("Base URL is required, for example https://apiX.successfactors.com/odata/v2"));
+      return;
+    }
     try {
       const response = await api<Record<string, unknown>>("/api/connections/successfactors/test", {
         method: "POST",
         body: JSON.stringify({
-          base_url: baseUrl || null,
+          base_url: baseUrl.trim() || null,
           auth_method: authMethod,
-          access_token: accessToken || null,
+          access_token: token || null,
           username: username || null,
           password: password || null,
           company_id: companyId || null,
