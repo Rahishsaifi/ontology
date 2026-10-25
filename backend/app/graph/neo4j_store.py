@@ -112,8 +112,30 @@ class Neo4jGraphStore:
             raise GraphError("The Neo4j driver is not installed.") from exc
         if not self._password:
             raise GraphError("NEO4J_PASSWORD is not configured.")
-        self._driver = GraphDatabase.driver(self.uri, auth=(self.user, self._password))
-        return self._driver
+
+        candidates = _uri_candidates(self.uri)
+        last_error: Exception | None = None
+        for uri in candidates:
+            driver = GraphDatabase.driver(uri, auth=(self.user, self._password))
+            try:
+                driver.verify_connectivity()
+                self.uri = uri
+                self._driver = driver
+                return self._driver
+            except Exception as exc:
+                last_error = exc
+                driver.close()
+                if not _is_routing_failure(exc):
+                    break
+
+        message = "Neo4j connection failed."
+        if last_error and _is_routing_failure(last_error):
+            message = (
+                "Neo4j could not retrieve routing information. "
+                "Check that the Aura instance is running, then try NEO4J_URI with bolt+s:// "
+                "instead of neo4j+s://, or set GRAPH_BACKEND=memory for a local demo."
+            )
+        raise GraphError(message) from last_error
 
     def _run(self, query: str, params: dict | None = None, *, write: bool = False):
         driver = self._connect()
@@ -519,3 +541,19 @@ def _edge_from_record(relationship, source, target) -> dict:
         "provenance": props.get("provenance") or "approved_mapping",
         "synced_at": props.get("syncedAt"),
     }
+
+def _uri_candidates(uri: str) -> list[str]:
+    cleaned = (uri or "").strip()
+    if not cleaned:
+        return []
+    out = [cleaned]
+    if cleaned.startswith("neo4j+s://"):
+        out.append("bolt+s://" + cleaned[len("neo4j+s://") :])
+    elif cleaned.startswith("neo4j://"):
+        out.append("bolt://" + cleaned[len("neo4j://") :])
+    return out
+
+
+def _is_routing_failure(exc: Exception) -> bool:
+    text = str(exc).lower()
+    return "routing" in text or "unable to retrieve routing information" in text
