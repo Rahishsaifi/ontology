@@ -4,7 +4,7 @@ import { Button, CodeBlock, ErrorText, Field, PageIntro, Panel } from "../compon
 
 export function ConnectPage() {
   const [baseUrl, setBaseUrl] = useState("");
-  const [authMethod, setAuthMethod] = useState("oauth_bearer");
+  const [authMethod, setAuthMethod] = useState("oauth_saml_private_key");
   const [accessToken, setAccessToken] = useState("");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -12,6 +12,10 @@ export function ConnectPage() {
   const [tokenUrl, setTokenUrl] = useState("");
   const [clientId, setClientId] = useState("");
   const [samlAssertion, setSamlAssertion] = useState("");
+  const [userId, setUserId] = useState("");
+  const [privateKey, setPrivateKey] = useState("");
+  const [userKey, setUserKey] = useState("");
+  const [idpUrl, setIdpUrl] = useState("");
   const [remember, setRemember] = useState(true);
   const [result, setResult] = useState("");
   const [error, setError] = useState<unknown>(null);
@@ -31,12 +35,17 @@ export function ConnectPage() {
           token_url: tokenUrl || null,
           client_id: clientId || null,
           saml_assertion: samlAssertion || null,
+          user_id: userId || null,
+          private_key: privateKey || null,
+          user_key: userKey || null,
+          idp_url: idpUrl || null,
           remember_for_session: remember,
         }),
       });
       setAccessToken("");
       setPassword("");
       setSamlAssertion("");
+      setPrivateKey("");
       setResult(JSON.stringify(response, null, 2));
     } catch (caught) {
       setError(caught);
@@ -48,7 +57,7 @@ export function ConnectPage() {
       <PageIntro
         kicker="Tenant"
         title="Connect"
-        body="Test SuccessFactors access. Secrets stay in API memory for this session and are cleared from the form after a successful test."
+        body="Use private-key SAML when you have company id, client id, user id, private key, token URL, and user_key. Username and password are not required for that flow."
       />
       <Panel
         title="SuccessFactors endpoint"
@@ -66,25 +75,86 @@ export function ConnectPage() {
         }
       >
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Base URL" value={baseUrl} onChange={setBaseUrl} placeholder="https://apiX.successfactors.com/odata/v2" />
+          <Field
+            label="Base URL"
+            value={baseUrl}
+            onChange={setBaseUrl}
+            placeholder="https://apiX.successfactors.com/odata/v2"
+          />
           <label className="block text-sm">
-            <span className="muted mb-1 block text-xs font-medium uppercase tracking-[0.08em]">Auth method</span>
+            <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted)]">
+              Auth method
+            </span>
             <select className="field" value={authMethod} onChange={(event) => setAuthMethod(event.target.value)}>
+              <option value="oauth_saml_private_key">oauth_saml_private_key</option>
               <option value="oauth_bearer">oauth_bearer</option>
+              <option value="oauth_saml_bearer">oauth_saml_bearer (paste assertion)</option>
               <option value="basic">basic</option>
-              <option value="oauth_saml_bearer">oauth_saml_bearer</option>
             </select>
           </label>
-          <Field label="Access token" value={accessToken} onChange={setAccessToken} secret />
-          <Field label="Username" value={username} onChange={setUsername} />
-          <Field label="Password" value={password} onChange={setPassword} secret />
-          <Field label="Company ID" value={companyId} onChange={setCompanyId} />
-          <Field label="Token URL" value={tokenUrl} onChange={setTokenUrl} />
-          <Field label="Client ID" value={clientId} onChange={setClientId} />
-          <div className="md:col-span-2">
-            <Field label="SAML assertion" value={samlAssertion} onChange={setSamlAssertion} secret />
-          </div>
+
+          {authMethod === "oauth_saml_private_key" ? (
+            <>
+              <Field label="Company ID" value={companyId} onChange={setCompanyId} />
+              <Field label="Client ID" value={clientId} onChange={setClientId} />
+              <Field label="User ID" value={userId} onChange={setUserId} hint="Sent as user_id to the IdP." />
+              <Field
+                label="User key header"
+                value={userKey}
+                onChange={setUserKey}
+                hint="HTTP header user_key. Leave blank to reuse User ID."
+              />
+              <Field
+                label="Token URL"
+                value={tokenUrl}
+                onChange={setTokenUrl}
+                placeholder="https://apiX.successfactors.com/oauth/token"
+              />
+              <Field
+                label="IdP URL"
+                value={idpUrl}
+                onChange={setIdpUrl}
+                placeholder="optional · defaults to …/oauth/idp"
+                hint="Only needed if your IdP is not the usual /oauth/idp next to token_url."
+              />
+              <div className="md:col-span-2">
+                <Field
+                  label="Private key (PEM)"
+                  value={privateKey}
+                  onChange={setPrivateKey}
+                  multiline
+                  placeholder={"-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----"}
+                />
+              </div>
+            </>
+          ) : null}
+
+          {authMethod === "oauth_bearer" ? (
+            <div className="md:col-span-2">
+              <Field label="Access token" value={accessToken} onChange={setAccessToken} secret />
+            </div>
+          ) : null}
+
+          {authMethod === "basic" ? (
+            <>
+              <Field label="Username" value={username} onChange={setUsername} />
+              <Field label="Password" value={password} onChange={setPassword} secret />
+              <Field label="Company ID" value={companyId} onChange={setCompanyId} />
+            </>
+          ) : null}
+
+          {authMethod === "oauth_saml_bearer" ? (
+            <>
+              <Field label="Company ID" value={companyId} onChange={setCompanyId} />
+              <Field label="Client ID" value={clientId} onChange={setClientId} />
+              <Field label="Token URL" value={tokenUrl} onChange={setTokenUrl} />
+              <div className="md:col-span-2">
+                <Field label="SAML assertion" value={samlAssertion} onChange={setSamlAssertion} multiline />
+              </div>
+            </>
+          ) : null}
         </div>
+
         <label className="mt-4 flex items-center gap-2 text-sm">
           <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
           Remember in API memory until the session is cleared

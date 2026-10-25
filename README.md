@@ -8,33 +8,37 @@ Demo mode is the default in `.env.example`. It reads `samples/synthetic-core-hr.
 
 Live mode requires `DEMO_MODE=false` and your own tenant URL plus one configured auth method: `oauth_bearer`, `basic`, or `oauth_saml_bearer`. The SAML option exchanges an assertion you already have. This app does not mint SAML assertions. A live connection and a live graph import have not been executed in this repository.
 
-## Setup
+## Setup (no Docker)
 
-Python 3.12 or newer and Node 22 are required. This workspace was tested with Python 3.14.
+Python 3.12+ and Node 22+ are required. This workspace was tested with Python 3.14.
 
 ```bash
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
 cp .env.example .env
-.venv/bin/python scripts/export_sample_ontology.py
-PYTHONPATH=backend .venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+chmod +x scripts/run-local.sh
+./scripts/run-local.sh
 ```
 
-In another shell:
+That script creates `.venv` if needed, installs Python and frontend deps when missing, then starts the API and UI together. Stop with Ctrl+C.
+
+Or use Make:
 
 ```bash
-cd frontend
-npm ci
-npm run dev
+make run
 ```
 
-Open http://127.0.0.1:5173. With both API tokens empty and `DEMO_MODE=true`, the dashboard accepts `demo-admin` and `demo-reader`. Interactive API docs are at http://127.0.0.1:8000/docs.
+Open http://127.0.0.1:5173. With both API tokens empty and `DEMO_MODE=true`, use `demo-admin` or `demo-reader`. API docs: http://127.0.0.1:8000/docs.
+
+To start the processes separately:
+
+```bash
+make install
+make api    # terminal 1
+make ui     # terminal 2
+```
 
 ```bash
 PYTHONPATH=backend .venv/bin/pytest backend/tests -q
 ```
-
-`make test` and `make api` do the same jobs when `pytest` and `uvicorn` are on `PATH`.
 
 ## Docker Compose
 

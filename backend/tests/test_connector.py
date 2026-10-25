@@ -143,3 +143,49 @@ def test_odata_cleaner_drops_metadata_and_deferred_values():
     )
     assert records == [{"userId": "U001"}]
     assert link.endswith("skiptoken=2")
+
+
+def test_private_key_saml_mints_assertion_then_exchanges_token():
+    from app.connector.auth import ResolvedAuth, SamlPrivateKeyAuth, derive_idp_url
+
+    assert derive_idp_url("https://api.example.com/oauth/token") == "https://api.example.com/oauth/idp"
+
+    seen = {"idp": None, "token": None}
+    private_key = "-----BEGIN PRIVATE KEY-----\nABC\n-----END PRIVATE KEY-----"
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("/oauth/idp"):
+            seen["idp"] = {
+                "user_key": request.headers.get("user_key"),
+                "body": dict(httpx.QueryParams(request.content.decode())),
+            }
+            assert "BEGIN PRIVATE KEY" in seen["idp"]["body"]["private_key"]
+            return httpx.Response(200, text="signed-saml-assertion")
+        if request.url.path.endswith("/oauth/token"):
+            seen["token"] = dict(httpx.QueryParams(request.content.decode()))
+            return httpx.Response(200, json={"access_token": "live-access-token"})
+        return httpx.Response(404)
+
+    auth = ResolvedAuth(
+        method="oauth_saml_private_key",
+        base_url=BASE,
+        company_id="ACME",
+        client_id="client-1",
+        user_id="sfadmin",
+        user_key="user-key-1",
+        token_url="https://api.example.com/oauth/token",
+        private_key=private_key,
+    )
+    with httpx.Client(transport=httpx.MockTransport(handler)) as http:
+        provider = SamlPrivateKeyAuth(auth, client=http)
+        headers = provider.headers()
+    assert headers == {"Authorization": "Bearer live-access-token"}
+    assert seen["idp"]["user_key"] == "user-key-1"
+    assert seen["idp"]["body"]["user_id"] == "sfadmin"
+    assert seen["idp"]["body"]["client_id"] == "client-1"
+    assert seen["idp"]["body"]["company_id"] == "ACME"
+    assert seen["idp"]["body"]["token_url"] == "https://api.example.com/oauth/token"
+    assert seen["token"]["grant_type"].startswith("urn:ietf:params:oauth:grant-type:saml2-bearer")
+    assert seen["token"]["assertion"] == "signed-saml-assertion"
+    assert seen["token"]["company_id"] == "ACME"
+    assert "ABC" not in str(headers)

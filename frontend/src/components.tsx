@@ -90,24 +90,39 @@ export function Field({
   onChange,
   secret = false,
   placeholder,
+  multiline = false,
+  hint,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   secret?: boolean;
   placeholder?: string;
+  multiline?: boolean;
+  hint?: string;
 }) {
   return (
     <label className="block text-sm">
-      <span className="muted mb-1 block text-xs font-medium uppercase tracking-[0.08em]">{label}</span>
-      <input
-        className="field"
-        type={secret ? "password" : "text"}
-        autoComplete="off"
-        value={value}
-        placeholder={placeholder}
-        onChange={(event) => onChange(event.target.value)}
-      />
+      <span className="mb-1 block text-xs font-medium uppercase tracking-[0.08em] text-[var(--muted)]">{label}</span>
+      {multiline ? (
+        <textarea
+          className="field min-h-28 font-mono text-xs"
+          autoComplete="off"
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      ) : (
+        <input
+          className="field"
+          type={secret ? "password" : "text"}
+          autoComplete="off"
+          value={value}
+          placeholder={placeholder}
+          onChange={(event) => onChange(event.target.value)}
+        />
+      )}
+      {hint ? <span className="mt-1 block text-xs text-[var(--muted)]">{hint}</span> : null}
     </label>
   );
 }
