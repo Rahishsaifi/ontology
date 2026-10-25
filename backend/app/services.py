@@ -23,7 +23,7 @@ from app.ontology.generator import apply_mapping_version, generate_ontology
 from app.redaction import redact_text
 from app.secrets import SecretOverlay, apply_overlay, effective_auth
 from app.storage import load_catalog, load_ontology, load_reviews, save_catalog, save_ontology, save_reviews
-from app.sync.runner import build_select, run_ingestion
+from app.sync.runner import build_select, choose_select, run_ingestion
 
 logger = logging.getLogger(__name__)
 
@@ -370,10 +370,22 @@ def preview_entity(state: AppState, entity_set: str, limit: int) -> dict:
 
         draft = _generate(catalog, [], sensitive_patterns=state.settings.sensitive_patterns())
         ontology_class = next(item for item in draft.classes if item.source_entity_type == entity.qualified_name)
-    selected = build_select(entity, ontology_class, relationships, include_sensitive=False)
+    selected, select_mode = choose_select(
+        entity, ontology_class, relationships, include_sensitive=False
+    )
     connector, owned = state.open_connector()
     try:
         page = connector.fetch_page(entity_set, select=selected, catalog=catalog, top=max(1, min(limit, 20)))
+        if not page.records and select_mode == "full":
+            core = build_select(
+                entity, ontology_class, relationships, include_sensitive=False, mode="core"
+            )
+            if core != selected:
+                page = connector.fetch_page(
+                    entity_set, select=core, catalog=catalog, top=max(1, min(limit, 20))
+                )
+                selected = core
+                select_mode = "core_after_empty"
     finally:
         if owned:
             connector.close()
@@ -386,6 +398,7 @@ def preview_entity(state: AppState, entity_set: str, limit: int) -> dict:
         "demo_mode": state.settings.demo_mode,
         "entity_set": entity_set,
         "fields": selected,
+        "select_mode": select_mode,
         "omitted_fields": omitted,
         "rows": page.records,
         "mapping_status": ontology_class.status,

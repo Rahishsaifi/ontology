@@ -60,6 +60,12 @@ def parse_unviewable_property(message: str) -> str | None:
     return None
 
 
+# SuccessFactors often returns an empty feed (HTTP 200, 0 rows) when $select lists
+# hundreds of EmpJob/User fields. Keep requests under this size; fall back to core.
+MAX_SELECT_FIELDS = 35
+MAX_SELECT_CHARS = 1400
+
+
 def build_select(
     entity,
     ontology_class,
@@ -67,6 +73,7 @@ def build_select(
     *,
     include_sensitive: bool,
     exclude: set[str] | None = None,
+    mode: str = "full",
 ) -> list[str]:
     rejected = {
         prop.source_property
@@ -75,28 +82,89 @@ def build_select(
     }
     blocked = set(NON_SELECTABLE_PROPERTIES) | set(exclude or ())
     sensitive = {prop.source_property for prop in ontology_class.properties if prop.sensitive}
+    property_map = entity.property_map()
+
+    def allowed(name: str) -> bool:
+        if name in entity.key.property_names:
+            return name in property_map
+        if name not in property_map:
+            return False
+        if name in rejected or name in blocked:
+            return False
+        if name in sensitive and not include_sensitive:
+            return False
+        prop = property_map[name]
+        return prop.edm_type.startswith("Edm.")
+
     fields: list[str] = []
+
+    def add(name: str) -> None:
+        if name and allowed(name) and name not in fields:
+            fields.append(name)
+
+    for field in entity.key.property_names:
+        add(field)
+    if mode == "core":
+        for field in LABEL_FIELDS:
+            add(field)
+        add("lastModifiedDateTime")
+        add("endDate")
+        add("seqNumber")
+        add("status")
+        add("userId")
+        add("department")
+        add("managerId")
+        add("position")
+        add("company")
+        add("businessUnit")
+        add("division")
+        for relationship in relationships:
+            for field in relationship.source_key_fields:
+                add(field)
+        return fields
+
     for prop in entity.properties:
-        if not prop.edm_type.startswith("Edm."):
-            continue
-        if prop.name in rejected:
-            continue
-        if prop.name in blocked and prop.name not in entity.key.property_names:
-            continue
-        if prop.name in sensitive and prop.name not in entity.key.property_names and not include_sensitive:
-            continue
-        fields.append(prop.name)
+        add(prop.name)
     for relationship in relationships:
         for field in relationship.source_key_fields:
-            if field not in fields and field not in rejected and field not in blocked and field in entity.property_map():
-                fields.append(field)
-    if "lastModifiedDateTime" in entity.property_map() and "lastModifiedDateTime" not in fields:
-        if "lastModifiedDateTime" not in rejected and "lastModifiedDateTime" not in blocked:
-            fields.append("lastModifiedDateTime")
+            add(field)
+    add("lastModifiedDateTime")
     for field in entity.key.property_names:
-        if field not in fields:
-            fields.append(field)
+        add(field)
     return fields
+
+
+def select_fits(fields: list[str]) -> bool:
+    return len(fields) <= MAX_SELECT_FIELDS and len(",".join(fields)) <= MAX_SELECT_CHARS
+
+
+def choose_select(
+    entity,
+    ontology_class,
+    relationships,
+    *,
+    include_sensitive: bool,
+    exclude: set[str] | None = None,
+) -> tuple[list[str], str]:
+    full = build_select(
+        entity,
+        ontology_class,
+        relationships,
+        include_sensitive=include_sensitive,
+        exclude=exclude,
+        mode="full",
+    )
+    if select_fits(full):
+        return full, "full"
+    core = build_select(
+        entity,
+        ontology_class,
+        relationships,
+        include_sensitive=include_sensitive,
+        exclude=exclude,
+        mode="core",
+    )
+    return core, "core"
 
 
 def run_ingestion(
@@ -279,13 +347,15 @@ def _import_entity(
         and item.relationship_type
     ]
     dropped_fields: set[str] = set()
-    selected = build_select(
+    selected, select_mode = choose_select(
         entity,
         ontology_class,
         approved_rels,
         include_sensitive=include_sensitive,
         exclude=dropped_fields,
     )
+    result["select_mode"] = select_mode
+    result["select_field_count"] = len(selected)
     state = database.get_sync_state(entity_set)
     if state and state.catalog_hash and state.catalog_hash != catalog.metadata_hash:
         summary["metadata_changed"] = True
@@ -341,14 +411,76 @@ def _import_entity(
                     approved_rels=approved_rels,
                     include_sensitive=include_sensitive,
                     dropped_fields=dropped_fields,
+                    select_mode=select_mode,
                 )
-                selected = build_select(
+                selected, select_mode = choose_select(
                     entity,
                     ontology_class,
                     approved_rels,
                     include_sensitive=include_sensitive,
                     exclude=dropped_fields,
+                ) if select_mode == "full" else (
+                    build_select(
+                        entity,
+                        ontology_class,
+                        approved_rels,
+                        include_sensitive=include_sensitive,
+                        exclude=dropped_fields,
+                        mode="core",
+                    ),
+                    "core",
                 )
+                # Live SF quirk: oversized $select can return HTTP 200 with 0 rows.
+                if (
+                    not page.records
+                    and not page.next_url
+                    and not next_url
+                    and select_mode == "full"
+                    and batch_no == 1
+                ):
+                    core = build_select(
+                        entity,
+                        ontology_class,
+                        approved_rels,
+                        include_sensitive=include_sensitive,
+                        exclude=dropped_fields,
+                        mode="core",
+                    )
+                    if core and core != selected:
+                        logger.warning(
+                            "Empty %s feed with %s-field $select; retrying with core fields (%s)",
+                            entity_set,
+                            len(selected),
+                            len(core),
+                        )
+                        page = _fetch_page_dropping_unviewable(
+                            connector=connector,
+                            entity_set=entity_set,
+                            selected=core,
+                            catalog=catalog,
+                            batch_size=batch_size,
+                            page_filter=page_filter,
+                            next_url=None,
+                            entity=entity,
+                            ontology_class=ontology_class,
+                            approved_rels=approved_rels,
+                            include_sensitive=include_sensitive,
+                            dropped_fields=dropped_fields,
+                            select_mode="core",
+                        )
+                        selected = build_select(
+                            entity,
+                            ontology_class,
+                            approved_rels,
+                            include_sensitive=include_sensitive,
+                            exclude=dropped_fields,
+                            mode="core",
+                        )
+                        select_mode = "core_after_empty"
+                        result["select_mode"] = select_mode
+                        result["select_field_count"] = len(selected)
+                result["select_mode"] = select_mode
+                result["select_field_count"] = len(selected)
             except Exception as exc:
                 incomplete = True
                 result["failed"] += 1
@@ -552,9 +684,11 @@ def _fetch_page_dropping_unviewable(
     approved_rels,
     include_sensitive: bool,
     dropped_fields: set[str],
+    select_mode: str = "full",
 ):
     """Retry $select after dropping properties SF reports as not viewable."""
     current = list(selected)
+    mode = "core" if select_mode.startswith("core") else "full"
     attempts = 0
     while True:
         try:
@@ -580,6 +714,7 @@ def _fetch_page_dropping_unviewable(
                 approved_rels,
                 include_sensitive=include_sensitive,
                 exclude=dropped_fields,
+                mode=mode,
             )
             attempts += 1
             logger.warning(

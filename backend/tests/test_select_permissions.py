@@ -1,6 +1,12 @@
 from app.discovery.parser import parse_edmx
+from app.models.catalog import PropertyModel
 from app.ontology.generator import generate_ontology
-from app.sync.runner import NON_SELECTABLE_PROPERTIES, build_select, parse_unviewable_property
+from app.sync.runner import (
+    NON_SELECTABLE_PROPERTIES,
+    build_select,
+    choose_select,
+    parse_unviewable_property,
+)
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -19,10 +25,7 @@ def test_build_select_excludes_operation_by_default():
     ontology = generate_ontology(catalog, [], sensitive_patterns=[])
     entity = catalog.entity_for_set("EmpJob")
     assert entity is not None
-    # Inject an EmpJob-like operation property if the fixture lacks it.
     if "operation" not in entity.property_map():
-        from app.models.catalog import PropertyModel
-
         entity.properties.append(
             PropertyModel(name="operation", edm_type="Edm.String", nullable=True, sensitive=False)
         )
@@ -30,5 +33,24 @@ def test_build_select_excludes_operation_by_default():
     selected = build_select(entity, ontology_class, [], include_sensitive=False)
     assert "operation" not in selected
     assert "operation" in NON_SELECTABLE_PROPERTIES
+    for key in entity.key.property_names:
+        assert key in selected
+
+
+def test_choose_select_falls_back_to_core_when_too_many_fields():
+    catalog = parse_edmx(FIXTURE, source_system="successfactors", origin="synthetic_demo")
+    ontology = generate_ontology(catalog, [], sensitive_patterns=[])
+    entity = catalog.entity_for_set("EmpJob")
+    assert entity is not None
+    for index in range(80):
+        name = f"customField{index}"
+        if name not in entity.property_map():
+            entity.properties.append(
+                PropertyModel(name=name, edm_type="Edm.String", nullable=True, sensitive=False)
+            )
+    ontology_class = next(item for item in ontology.classes if item.source_entity_set == "EmpJob")
+    selected, mode = choose_select(entity, ontology_class, [], include_sensitive=False)
+    assert mode == "core"
+    assert len(selected) < 40
     for key in entity.key.property_names:
         assert key in selected

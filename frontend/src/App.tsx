@@ -17,10 +17,10 @@ const links = [
   ["/connect", "Connect"],
   ["/schema", "Schema"],
   ["/ontology", "Ontology"],
-  ["/graph", "Graph"],
-  ["/ingestion", "Ingestion"],
   ["/query", "Query"],
   ["/sync", "Sync"],
+  ["/ingestion", "Ingestion"],
+  ["/graph", "Graph"],
   ["/docs", "Docs"],
 ];
 
