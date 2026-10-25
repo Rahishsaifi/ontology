@@ -35,8 +35,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if settings.graph_backend == "neo4j":
             try:
                 app.state.ctx.graph.init_schema()
-            except Exception:
-                logger.warning("Neo4j schema initialization did not complete. The API is up; test the connection from the dashboard.")
+            except Exception as exc:
+                logger.warning(
+                    "Neo4j schema initialization did not complete: %s. The API is up; fix NEO4J_* or use GRAPH_BACKEND=memory.",
+                    redact_text(str(exc)),
+                )
         if settings.demo_mode:
             logger.info("Demo mode is on. SuccessFactors calls are disabled and synthetic HR data is used.")
         yield

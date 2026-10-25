@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, getToken } from "../api";
+import { api } from "../api";
 import { ErrorText, PageIntro } from "../components";
 
 type Health = {
@@ -32,7 +32,6 @@ export function OverviewPage() {
         const next = await api<Health>("/api/health");
         if (cancelled) return;
         setHealth(next);
-        if (!getToken()) return;
         const [graph, entities] = await Promise.all([
           api<Summary>("/api/graph/summary").catch(() => null),
           api<{ entities: unknown[] }>("/api/discovery/entities").catch(() => null),
@@ -102,12 +101,6 @@ export function OverviewPage() {
             <Link className="linkish" to="/ingestion">
               Import data
             </Link>
-            {health.accepts_demo_tokens ? (
-              <>
-                <span className="muted">·</span>
-                <span className="muted">Use demo-admin or demo-reader in the token field</span>
-              </>
-            ) : null}
           </div>
         </section>
       ) : null}

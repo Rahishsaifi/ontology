@@ -26,7 +26,7 @@ Or use Make:
 make run
 ```
 
-Open http://127.0.0.1:5173. With both API tokens empty and `DEMO_MODE=true`, use `demo-admin` or `demo-reader`. API docs: http://127.0.0.1:8000/docs.
+Open http://127.0.0.1:5173. In demo mode with empty `APP_*` tokens, the UI does not ask for a bearer token. API docs: http://127.0.0.1:8000/docs.
 
 To start the processes separately:
 
@@ -57,7 +57,7 @@ Set `NEO4J_INTEGRATION=1` to run the optional Neo4j test against a database you 
 - `backend/app/ontology` proposes canonical Core HR concepts. User is not inferred as Person, Employee, or Employment. Guesses stay `review_required` until a person approves them.
 - `backend/app/sync` upserts approved entities. Relationship edges are reconciled only after a non-empty successful full sync. A failed or empty read keeps the existing graph.
 - `backend/app/graph` writes to memory or Neo4j. Neo4j Community cannot enforce a multi-property node key, so uniqueness is a single `identity` property built from source system, entity type, and source key.
-- The React dashboard talks only to this API. It keeps the API bearer token in `sessionStorage`.
+- The React dashboard talks only to this API. In demo mode it does not collect an API bearer token.
 
 ## Security
 
@@ -74,7 +74,7 @@ Regenerate the draft with `PYTHONPATH=backend .venv/bin/python scripts/export_sa
 
 ## Dashboard
 
-Overview, Connect, Schema, Ontology, Graph, Ingestion, Query, and Sync are the eight screens. A typical demo path is: enter `demo-admin`, discover metadata, generate the draft, import the sample review, dry-run EmpJob, then import the Core HR sets and run the reporting-lines query.
+Overview, Connect, Schema, Ontology, Graph, Ingestion, Query, and Sync are the eight screens. A typical demo path is: discover metadata, generate the draft, import the sample review, dry-run EmpJob, then import the Core HR sets and run the reporting-lines query.
 
 ## Limitations
 

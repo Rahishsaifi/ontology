@@ -1,6 +1,6 @@
 import { NavLink, Route, Routes, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
-import { api, getToken, setToken } from "./api";
+import { api } from "./api";
 import { Banner } from "./components";
 import { ConnectPage } from "./pages/Connect";
 import { GraphPage } from "./pages/Graph";
@@ -23,7 +23,6 @@ const links = [
 ];
 
 export function App() {
-  const [token, setTokenState] = useState(getToken());
   const [demo, setDemo] = useState<boolean | null>(null);
   const location = useLocation();
 
@@ -65,25 +64,6 @@ export function App() {
         {demo ? (
           <Banner text="Demo mode is on. Tenant data is synthetic and no SuccessFactors call is made." />
         ) : null}
-        <header className="flex flex-wrap items-end justify-between gap-4 border-b border-[var(--line)] bg-[rgba(255,255,255,0.72)] px-4 py-3 backdrop-blur-md lg:px-6">
-          <label className="min-w-[14rem] flex-1 text-sm">
-            <span className="muted mb-1 block text-xs font-medium uppercase tracking-[0.08em]">API bearer token</span>
-            <input
-              className="field max-w-sm"
-              type="password"
-              autoComplete="off"
-              value={token}
-              placeholder="demo-admin"
-              onChange={(event) => {
-                setToken(event.target.value);
-                setTokenState(event.target.value);
-              }}
-            />
-          </label>
-          <p className="muted max-w-xs pb-1 text-xs leading-relaxed">
-            Kept in this browser tab only. SAP credentials are never stored in the UI.
-          </p>
-        </header>
         <main key={location.pathname} className="page-enter flex-1 space-y-4 p-4 lg:p-7">
           <Routes>
             <Route path="/" element={<OverviewPage />} />

@@ -111,7 +111,6 @@ echo "Ready (no Docker)."
 echo "  UI:      http://${UI_HOST}:${UI_PORT}"
 echo "  API:     http://${API_HOST}:${API_PORT}"
 echo "  Docs:    http://${API_HOST}:${API_PORT}/docs"
-echo "  Token:   demo-admin   (when DEMO_MODE=true and API tokens are empty)"
 echo
 echo "Press Ctrl+C to stop both processes."
 

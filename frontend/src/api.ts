@@ -1,13 +1,3 @@
-const TOKEN_KEY = "sf-ontology-token";
-
-export function getToken(): string {
-  return sessionStorage.getItem(TOKEN_KEY) || "";
-}
-
-export function setToken(token: string): void {
-  sessionStorage.setItem(TOKEN_KEY, token.trim());
-}
-
 export class ApiError extends Error {
   status: number;
   code: string;
@@ -24,10 +14,6 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   headers.set("Accept", "application/json");
   if (options.body && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
-  }
-  const token = getToken();
-  if (token) {
-    headers.set("Authorization", `Bearer ${token}`);
   }
   const response = await fetch(path, { ...options, headers });
   const text = await response.text();

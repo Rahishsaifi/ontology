@@ -12,6 +12,7 @@ from app.errors import GraphError, NotFoundError, TransientGraphError
 from app.graph.models import EntityUpsert, RelationshipUpsert
 from app.mapping.keys import composite_identity
 from app.ontology.canonical import BUSINESS_REL_TYPES
+from app.redaction import redact_text
 
 ENTITY_CONSTRAINT = """
 CREATE CONSTRAINT sf_entity_identity IF NOT EXISTS
@@ -119,23 +120,39 @@ class Neo4jGraphStore:
             driver = GraphDatabase.driver(uri, auth=(self.user, self._password))
             try:
                 driver.verify_connectivity()
+                # Aura bolt+s often verifies but cannot open the tenant DB without routing.
+                with driver.session() as session:
+                    session.run("RETURN 1 AS ok").consume()
                 self.uri = uri
                 self._driver = driver
                 return self._driver
             except Exception as exc:
                 last_error = exc
-                driver.close()
-                if not _is_routing_failure(exc):
-                    break
+                try:
+                    driver.close()
+                except Exception:
+                    pass
+                continue
 
         message = "Neo4j connection failed."
         if last_error and _is_routing_failure(last_error):
             message = (
-                "Neo4j could not retrieve routing information. "
-                "Check that the Aura instance is running, then try NEO4J_URI with bolt+s:// "
-                "instead of neo4j+s://, or set GRAPH_BACKEND=memory for a local demo."
+                "Neo4j Aura needs neo4j+s:// routing to open the tenant database. "
+                "Set NEO4J_URI=neo4j+s://YOUR_ID.databases.neo4j.io (not bolt+s://). "
+                "If your office network blocks routing, use GRAPH_BACKEND=memory or allow "
+                "*.databases.neo4j.io."
             )
+        elif last_error:
+            message = f"Neo4j connection failed: {redact_text(str(last_error))[:180]}"
         raise GraphError(message) from last_error
+
+    def _reset_driver(self) -> None:
+        if self._driver is not None:
+            try:
+                self._driver.close()
+            except Exception:
+                pass
+            self._driver = None
 
     def _run(self, query: str, params: dict | None = None, *, write: bool = False):
         driver = self._connect()
@@ -144,11 +161,33 @@ class Neo4jGraphStore:
                 if write:
                     return session.execute_write(lambda tx: list(tx.run(query, params or {})))
                 return session.execute_read(lambda tx: list(tx.run(query, params or {})))
+        except GraphError:
+            raise
         except Exception as exc:
-            text = str(exc).lower()
-            if any(token in text for token in ("unavailable", "timeout", "defunct", "connection refused", "failed to")):
-                raise TransientGraphError("Neo4j is temporarily unavailable.") from exc
-            raise GraphError("The graph operation failed.") from exc
+            self._reset_driver()
+            detail = redact_text(str(exc)).strip() or "unknown Neo4j error"
+            text = detail.lower()
+            if _is_routing_failure(exc) or "routing" in text:
+                raise GraphError(
+                    "Neo4j could not retrieve routing information. "
+                    "On office networks set NEO4J_URI to bolt+s://YOUR_ID.databases.neo4j.io "
+                    "or use GRAPH_BACKEND=memory."
+                ) from exc
+            if any(
+                token in text
+                for token in (
+                    "unavailable",
+                    "timeout",
+                    "defunct",
+                    "connection refused",
+                    "failed to",
+                    "serviceunavailable",
+                    "cannot resolve",
+                    "nodename nor servname",
+                )
+            ):
+                raise TransientGraphError(f"Neo4j is temporarily unavailable: {detail[:180]}") from exc
+            raise GraphError(f"Neo4j request failed: {detail[:180]}") from exc
 
     def init_schema(self) -> dict:
         for statement in (ENTITY_CONSTRAINT, CLASS_CONSTRAINT, PROPERTY_CONSTRAINT, RELATION_CONSTRAINT):
@@ -176,10 +215,21 @@ class Neo4jGraphStore:
 
     def test(self) -> dict:
         try:
-            self._run("MATCH (n) RETURN count(n) AS count LIMIT 1")
-        except GraphError as exc:
-            return {"connected": False, "backend": self.backend, "ephemeral": False, "detail": exc.message}
-        return {"connected": True, "backend": self.backend, "ephemeral": False, "detail": "Neo4j accepted a read query."}
+            self._reset_driver()
+            self._run("RETURN 1 AS ok")
+        except (GraphError, TransientGraphError) as exc:
+            return {
+                "connected": False,
+                "backend": self.backend,
+                "ephemeral": False,
+                "detail": exc.message,
+            }
+        return {
+            "connected": True,
+            "backend": self.backend,
+            "ephemeral": False,
+            "detail": f"Neo4j accepted a read query via {self.uri}.",
+        }
 
     def upsert_entities(self, rows: list[EntityUpsert]) -> int:
         if not rows:
@@ -543,17 +593,40 @@ def _edge_from_record(relationship, source, target) -> dict:
     }
 
 def _uri_candidates(uri: str) -> list[str]:
+    """Aura needs neo4j+s routing to reach the tenant database.
+
+    bolt+s can verify TLS but then fail with DatabaseNotFound because the
+    direct host is not the routed database member. Prefer neo4j+s for Aura.
+    """
     cleaned = (uri or "").strip()
     if not cleaned:
         return []
-    out = [cleaned]
-    if cleaned.startswith("neo4j+s://"):
-        out.append("bolt+s://" + cleaned[len("neo4j+s://") :])
+    out: list[str] = []
+
+    def add(value: str) -> None:
+        if value and value not in out:
+            out.append(value)
+
+    aura = "databases.neo4j.io" in cleaned.lower()
+    if cleaned.startswith("bolt+s://") and aura:
+        add("neo4j+s://" + cleaned[len("bolt+s://") :])
+        add(cleaned)
+    elif cleaned.startswith("neo4j+s://"):
+        add(cleaned)
+        add("bolt+s://" + cleaned[len("neo4j+s://") :])
     elif cleaned.startswith("neo4j://"):
-        out.append("bolt://" + cleaned[len("neo4j://") :])
+        add(cleaned)
+        add("bolt://" + cleaned[len("neo4j://") :])
+    else:
+        add(cleaned)
     return out
 
 
 def _is_routing_failure(exc: Exception) -> bool:
     text = str(exc).lower()
-    return "routing" in text or "unable to retrieve routing information" in text
+    return (
+        "routing" in text
+        or "unable to retrieve routing information" in text
+        or "databasenotfound" in text
+        or "database not found" in text
+    )
