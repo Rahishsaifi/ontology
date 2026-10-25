@@ -29,12 +29,25 @@ def test_authentication_failure_is_not_retried_and_token_is_not_in_the_error():
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request.url.path)
         assert request.headers["authorization"].startswith("Bearer ")
+        assert "xml" in request.headers["accept"].lower()
         return httpx.Response(401, json={"error": {"message": {"value": "bad credentials"}}})
 
     with pytest.raises(UpstreamAuthenticationError) as caught:
         client(handler).get_metadata()
     assert len(calls) == 1
     assert "super-secret-token" not in str(caught.value)
+
+
+def test_metadata_requests_xml_accept_header():
+    seen = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["accept"] = request.headers.get("accept", "")
+        return httpx.Response(200, content=FIXTURE, headers={"content-type": "application/xml"})
+
+    client(handler).get_metadata()
+    assert "xml" in seen["accept"].lower()
+    assert "json" not in seen["accept"].lower()
 
 
 def test_retries_server_errors_and_honors_retry_after():

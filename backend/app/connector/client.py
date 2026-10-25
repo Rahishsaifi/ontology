@@ -64,16 +64,16 @@ class SuccessFactorsClient:
     def close(self) -> None:
         self._client.close()
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self, *, accept: str) -> dict[str, str]:
         if self._provider is None:
             self._provider = build_provider(self.auth, client=self._client)
-        return {"Accept": "application/json", **self._provider.headers()}
+        return {"Accept": accept, **self._provider.headers()}
 
-    def _request(self, url: str, params: dict | None) -> httpx.Response:
+    def _request(self, url: str, params: dict | None, *, accept: str = "application/json") -> httpx.Response:
         last_error: Exception | None = None
         for attempt in range(self.max_retries + 1):
             try:
-                response = self._client.get(url, params=params, headers=self._headers())
+                response = self._client.get(url, params=params, headers=self._headers(accept=accept))
             except httpx.HTTPError as exc:
                 last_error = exc
                 if attempt >= self.max_retries:
@@ -84,6 +84,11 @@ class SuccessFactorsClient:
                 raise ConnectorError("SuccessFactors returned a redirect, which was not followed.")
             if response.status_code in {401, 403}:
                 raise UpstreamAuthenticationError("SuccessFactors rejected the configured credentials.")
+            if response.status_code == 406:
+                raise ConnectorError(
+                    "SuccessFactors returned 406 Not Acceptable. "
+                    "$metadata must be requested as XML; entity feeds use JSON."
+                )
             if response.status_code == 429 or response.status_code >= 500:
                 if attempt >= self.max_retries:
                     raise ConnectorError(safe_http_message(response))
@@ -111,7 +116,12 @@ class SuccessFactorsClient:
             )
 
     def get_metadata(self) -> bytes:
-        response = self._request(f"{self.base_url}/$metadata", None)
+        # OData $metadata is EDMX XML. Accept: application/json causes HTTP 406 on SuccessFactors.
+        response = self._request(
+            f"{self.base_url}/$metadata",
+            None,
+            accept="application/xml",
+        )
         return response.content
 
     def fetch_page(
