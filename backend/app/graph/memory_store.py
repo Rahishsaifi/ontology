@@ -135,6 +135,36 @@ class MemoryGraphStore:
             "edges": edges,
         }
 
+    def explore(self, *, entity_types: list[str] | None = None, limit: int = 80) -> dict:
+        rows = list(self.nodes.values())
+        if entity_types:
+            wanted = set(entity_types)
+            rows = [row for row in rows if row.entity_type in wanted]
+        rows.sort(key=lambda row: (row.entity_type, row.source_key))
+        seed = rows[: max(1, min(limit, 200))]
+        nodes = {row.identity: row for row in seed}
+        if not nodes:
+            return {"nodes": [], "edges": [], "note": "No imported SFEntity nodes match this filter."}
+        edges = []
+        for edge in self.edges.values():
+            if edge.source_identity in nodes or edge.target_identity in nodes:
+                if edge.source_identity in self.nodes:
+                    nodes[edge.source_identity] = self.nodes[edge.source_identity]
+                if edge.target_identity in self.nodes:
+                    nodes[edge.target_identity] = self.nodes[edge.target_identity]
+                edges.append(_public_edge(edge, self.nodes))
+        note = None
+        if not edges:
+            note = (
+                "Nodes are loaded, but no approved relationship edges exist between them yet. "
+                "Approve User/EmpJob navigations in Ontology, then re-import so HAS_JOB / REPORTS_TO links appear."
+            )
+        return {
+            "nodes": [_public_node(node) for node in nodes.values()],
+            "edges": edges,
+            "note": note,
+        }
+
     def library_rows(self, query_id: str, params: dict, limit: int) -> list[dict]:
         if query_id == "entities-by-type":
             counts = Counter(node.entity_type for node in self.nodes.values())

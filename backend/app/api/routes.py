@@ -300,6 +300,18 @@ def graph_neighborhood(entity_type: str, source_key: str, request: Request, _: s
     return state(request).graph.neighborhood(entity_type, source_key)
 
 
+@router.get("/graph/explore", tags=["graph"])
+def graph_explore(
+    request: Request,
+    entity_types: str | None = None,
+    limit: int = 80,
+    _: str = Depends(require_reader),
+):
+    types = [part.strip() for part in (entity_types or "").split(",") if part.strip()] or None
+    capped = max(1, min(limit, 200))
+    return state(request).graph.explore(entity_types=types, limit=capped)
+
+
 @router.get("/graph/queries", tags=["graph"])
 def graph_queries(request: Request, _: str = Depends(require_reader)):
     return {

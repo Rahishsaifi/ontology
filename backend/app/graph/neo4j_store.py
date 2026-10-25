@@ -483,6 +483,86 @@ class Neo4jGraphStore:
                 edges.append(_edge_from_record(record["r"], records[0]["n"], record["m"]))
         return {"center": center, "nodes": list(nodes.values()), "edges": edges}
 
+    def explore(self, *, entity_types: list[str] | None = None, limit: int = 80) -> dict:
+        """Return a connected subgraph for the explorer canvas."""
+        capped = max(1, min(limit, 200))
+        types = [item for item in (entity_types or []) if item] or None
+        seed = self._run(
+            """
+            MATCH (n:SFEntity)
+            WHERE $types IS NULL OR n.entityType IN $types
+            RETURN n
+            ORDER BY n.entityType, n.sourceKey
+            LIMIT $limit
+            """,
+            {"types": types, "limit": capped},
+        )
+        nodes: dict[str, dict] = {}
+        for record in seed:
+            node = _node_from_record(record["n"])
+            nodes[node["identity"]] = node
+        if not nodes:
+            return {"nodes": [], "edges": [], "note": "No imported SFEntity nodes match this filter."}
+
+        identities = list(nodes.keys())
+        edge_records = self._run(
+            """
+            MATCH (a:SFEntity)-[r]->(b:SFEntity)
+            WHERE a.identity IN $identities AND b.identity IN $identities
+              AND type(r) IN $types
+            RETURN a, r, b
+            LIMIT $limit
+            """,
+            {
+                "identities": identities,
+                "types": sorted(BUSINESS_REL_TYPES),
+                "limit": capped * 4,
+            },
+        )
+        # Pull one hop outside the seed set so User↔EmpJob links appear
+        # even when only one side was filtered into the seed page.
+        hop_records = self._run(
+            """
+            MATCH (a:SFEntity)-[r]->(b:SFEntity)
+            WHERE (a.identity IN $identities OR b.identity IN $identities)
+              AND type(r) IN $types
+            RETURN a, r, b
+            LIMIT $limit
+            """,
+            {
+                "identities": identities,
+                "types": sorted(BUSINESS_REL_TYPES),
+                "limit": capped * 4,
+            },
+        )
+        edges = []
+        seen_edges: set[tuple] = set()
+        for record in edge_records + hop_records:
+            left = _node_from_record(record["a"])
+            right = _node_from_record(record["b"])
+            nodes[left["identity"]] = left
+            nodes[right["identity"]] = right
+            edge = _edge_from_record(record["r"], record["a"], record["b"])
+            key = (
+                edge.get("relationship_type"),
+                edge.get("source_entity_type"),
+                edge.get("source_key"),
+                edge.get("target_entity_type"),
+                edge.get("target_key"),
+                edge.get("mapping_id"),
+            )
+            if key in seen_edges:
+                continue
+            seen_edges.add(key)
+            edges.append(edge)
+        note = None
+        if not edges:
+            note = (
+                "Nodes are loaded, but no approved relationship edges exist between them yet. "
+                "Approve User/EmpJob navigations in Ontology, then re-import so HAS_JOB / REPORTS_TO links appear."
+            )
+        return {"nodes": list(nodes.values()), "edges": edges, "note": note}
+
     def run_cypher(self, cypher: str, params: dict, *, timeout: float, limit: int) -> tuple[list[str], list[dict], bool]:
         driver = self._connect()
         try:
