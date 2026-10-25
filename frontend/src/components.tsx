@@ -147,6 +147,44 @@ export function Spinner({ label = "Loading…" }: { label?: string }) {
   );
 }
 
+export function ProgressBar({
+  value,
+  max = 100,
+  label,
+}: {
+  value: number;
+  max?: number;
+  label?: string;
+}) {
+  const pct = max > 0 ? Math.min(100, Math.round((value / max) * 100)) : 0;
+  return (
+    <div className="w-full" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100}>
+      {label ? <p className="muted mb-1.5 text-xs">{label}</p> : null}
+      <div className="progress-track">
+        <div className="progress-fill" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="muted mt-1 text-xs tabular-nums">{pct}%</p>
+    </div>
+  );
+}
+
+export function StatusBanner({
+  tone,
+  title,
+  body,
+}: {
+  tone: "info" | "success" | "warn" | "danger";
+  title: string;
+  body?: string;
+}) {
+  return (
+    <div className={`status-banner status-banner-${tone}`} role="status">
+      <p className="font-medium">{title}</p>
+      {body ? <p className="mt-1 text-sm opacity-90">{body}</p> : null}
+    </div>
+  );
+}
+
 export function PaginationBar({
   page,
   pageSize,

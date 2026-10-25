@@ -370,6 +370,51 @@ a {
   margin-top: 0.5rem;
 }
 
+.progress-track {
+  height: 0.55rem;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(7, 22, 30, 0.08);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, #0f766e, #14b8a6);
+  transition: width 280ms ease;
+}
+
+.status-banner {
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  padding: 0.85rem 1rem;
+}
+
+.status-banner-info {
+  background: rgba(15, 118, 110, 0.08);
+  border-color: rgba(15, 118, 110, 0.2);
+  color: var(--ink-soft);
+}
+
+.status-banner-success {
+  background: rgba(4, 120, 87, 0.1);
+  border-color: rgba(4, 120, 87, 0.22);
+  color: var(--ok);
+}
+
+.status-banner-warn {
+  background: rgba(154, 103, 0, 0.1);
+  border-color: rgba(154, 103, 0, 0.22);
+  color: var(--warn);
+}
+
+.status-banner-danger {
+  background: rgba(159, 18, 57, 0.08);
+  border-color: rgba(159, 18, 57, 0.2);
+  color: var(--danger);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .page-enter,
   .hero-status,
